@@ -1,0 +1,46 @@
+# --------------------------------------------------------------------------
+# Data. PTB-XL is ~1.8 GB and is redistributed by PhysioNet under its own
+# licence; it is never committed here. Recreate it with:
+#   python scripts/download_data.py
+# --------------------------------------------------------------------------
+data/
+*.dat
+*.hea
+
+# Experiment tracking and artifacts
+mlruns/
+mlartifacts/
+*.ckpt
+*.pt
+*.pth
+
+# Results: the small tables and figures in results/ ARE committed, but not
+# anything bulky that happens to land there.
+results/**/*.npz
+results/**/*.csv.gz
+results/**/*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments
+.venv/
+venv/
+.python-version
+
+# Notebooks: outputs are stripped by pre-commit (nbstripout), so committed
+# notebooks stay reviewable and small.
+.ipynb_checkpoints/
+
+# Editors and OS
+.DS_Store
+.vscode/
+.idea/

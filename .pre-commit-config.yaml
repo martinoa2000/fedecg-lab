@@ -1,0 +1,30 @@
+# Run on every commit:  pre-commit install
+# Run over everything:  pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # Nothing bigger than 1 MB should ever be committed: waveform data and
+        # checkpoints belong outside git.
+        args: ["--maxkb=1024"]
+      - id: check-case-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+      - id: nbstripout
+        # Notebook outputs (plots of patient ECGs, long training logs) would
+        # otherwise bloat the repository and make diffs unreadable.

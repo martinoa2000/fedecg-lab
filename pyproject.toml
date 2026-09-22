@@ -1,0 +1,105 @@
+[project]
+name = "fedecg-lab"
+version = "0.1.0"
+description = "Multi-label 12-lead ECG classification: centralized vs. federated training with differential privacy and explainability."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "Martin" }]
+keywords = ["ecg", "federated-learning", "differential-privacy", "deep-learning", "healthcare"]
+
+# Versions are pinned exactly. This repository is a reproducibility exercise:
+# every reported number must be traceable to a known environment. `uv.lock`
+# pins the transitive closure on top of these direct pins.
+dependencies = [
+    # Core numerics
+    "numpy==2.4.6",
+    "pandas==3.0.6",
+    "scipy==1.17.1",
+    "scikit-learn==1.9.1",
+    # Deep learning
+    "torch==2.14.0",
+    # ECG I/O and signal processing
+    "wfdb==4.3.1",
+    "neurokit2==0.2.12",
+    # Federated learning. The `simulation` extra pulls in Ray, which runs all
+    # simulated clients inside a single process on one machine.
+    "flwr[simulation]==1.37.0",
+    # Differential privacy (DP-SGD)
+    "opacus==1.6.0",
+    # Explainability (Integrated Gradients, saliency)
+    "captum==0.9.0",
+    # Experiment tracking
+    "mlflow==3.16.1",
+    # Config, plotting, CLI ergonomics
+    "pyyaml==6.0.3",
+    "matplotlib==3.11.2",
+    "tqdm==4.70.1",
+]
+
+[project.urls]
+Repository = "https://github.com/martinoa2000/fedecg-lab"
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.8",
+    "pre-commit==4.6.2",
+    "ipykernel==7.3.0",
+    "jupyterlab==4.6.4",
+    "nbstripout==0.9.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fedecg"]
+
+# --------------------------------------------------------------------------
+# Tooling
+# --------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "NPY", # numpy-specific rules
+    "RUF",
+]
+ignore = [
+    "D105", # missing docstring in magic method
+    "D107", # missing docstring in __init__ (documented at class level instead)
+    "E501", # line length is handled by the formatter
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test names are the documentation; notebooks are exploratory. NPY002 is
+# allowed in tests because some of them deliberately exercise the legacy global
+# numpy random state to prove our generators are isolated from it.
+"tests/*" = ["D100", "D101", "D102", "D103", "NPY002"]
+"notebooks/*" = ["D", "E402", "B018"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --strict-markers"
+markers = [
+    "slow: tests that train a model or read the full dataset (deselect with '-m \"not slow\"')",
+    "needs_data: tests that require the PTB-XL dataset to be downloaded",
+]
