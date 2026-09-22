@@ -64,6 +64,16 @@ Download PTB-XL (~1.8 GB download, ~1 GB on disk after extraction):
 uv run python scripts/download_data.py
 ```
 
+Produce the exploration tables and figures (label balance, co-occurrence,
+per-site/device breakdown, example signals) into `results/`:
+
+```bash
+uv run python scripts/explore_data.py
+```
+
+The first training run caches all waveforms in `data/cache/` as a single
+`.npz`, so later runs skip WFDB parsing.
+
 Run the test suite:
 
 ```bash
@@ -80,6 +90,7 @@ uv run pre-commit install
 
 - [x] **1. Setup** — project structure, pinned dependencies, pre-commit, CI, reproducible data download.
 - [ ] **2. Exploration and preprocessing** — label distribution, per-class ECG visualization, filtering and normalization.
+  *Code, tests and notebook `01_exploration` done (`fedecg.data.ptbxl`, `preprocess`, `stats`); committed tables pending a run on the full dataset.*
 - [ ] **3. Centralized baseline** — 1D ResNet, early stopping, MLflow tracking, comparison against published PTB-XL results.
 - [ ] **4. Federated (IID)** — Flower simulation of N hospitals with random splits, FedAvg vs. centralized.
 - [ ] **5. Federated (non-IID)** — partitions by recording `site`/`device` and Dirichlet label skew; FedAvg vs. FedProx.
@@ -119,6 +130,15 @@ so all phases stay directly comparable.
 **Reproducibility.** Fixed seeds, versioned configs, and an exact `uv.lock`.
 Data partitioning uses explicitly-passed NumPy generators rather than global
 random state, since the split across hospitals *is* the experiment.
+
+**Zero-phase filtering, train-only statistics.** The 0.5–40 Hz band-pass runs
+forwards and backwards so ST segments do not shift relative to the QRS, and the
+per-lead standardizer is fitted on the training split only. It is serializable,
+so the federated phases can compare global against per-hospital statistics.
+
+**Tests without the dataset.** `tests/conftest.py` writes a miniature PTB-XL
+tree (same CSV columns, same WFDB record format) so the loading, labeling and
+splitting code is exercised in CI without the 1.8 GB download.
 
 **Laptop-sized.** No GPU required. Every config exposes a `subsample` option for
 fast smoke runs, and CI never trains anything.
