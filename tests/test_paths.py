@@ -17,6 +17,7 @@ class TestProjectRoot:
             paths.PTBXL_DIR,
             paths.CONFIG_DIR,
             paths.RESULTS_DIR,
+            paths.CACHE_DIR,
             paths.MLRUNS_DIR,
         ):
             assert path.is_relative_to(paths.PROJECT_ROOT)

@@ -22,8 +22,12 @@ multi-label rather than multi-class.
 
 NUM_CLASSES: int = len(SUPERCLASSES)
 
-NUM_LEADS: int = 12
-"""Standard 12-lead layout: I, II, III, aVR, aVL, aVF, V1-V6."""
+LEAD_NAMES: tuple[str, ...] = (
+    "I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6",
+)  # fmt: skip
+"""Standard 12-lead layout, in the channel order PTB-XL stores them."""
+
+NUM_LEADS: int = len(LEAD_NAMES)
 
 SAMPLING_RATE_HZ: int = 100
 """This project uses the 100 Hz version of PTB-XL to stay laptop-friendly."""

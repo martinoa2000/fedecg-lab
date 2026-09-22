@@ -21,6 +21,9 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 PTBXL_DIR = DATA_DIR / "ptbxl"
 """Extracted PTB-XL tree (contains ptbxl_database.csv and records100/)."""
 
+CACHE_DIR = DATA_DIR / "cache"
+"""Derived arrays (e.g. all waveforms in one `.npz`). Safe to delete."""
+
 CONFIG_DIR = PROJECT_ROOT / "configs"
 RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = RESULTS_DIR / "figures"
