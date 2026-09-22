@@ -3,7 +3,9 @@
 # licence; it is never committed here. Recreate it with:
 #   python scripts/download_data.py
 # --------------------------------------------------------------------------
-data/
+# Leading slash matters: an unanchored `data/` would also swallow the
+# `src/fedecg/data/` package.
+/data/
 *.dat
 *.hea
 
