@@ -1,6 +1,6 @@
 # fedecg-lab
 
-[![CI](https://github.com/martinoa2000-creator/fedecg-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/martinoa2000-creator/fedecg-lab/actions/workflows/ci.yml)
+[![CI](https://github.com/martinoa2000/fedecg-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/martinoa2000/fedecg-lab/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -53,7 +53,7 @@ PhysioNet and verifies every file against the official `SHA256SUMS.txt`.
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+.
 
 ```bash
-git clone https://github.com/martinoa2000-creator/fedecg-lab.git
+git clone https://github.com/martinoa2000/fedecg-lab.git
 cd fedecg-lab
 uv sync
 ```
@@ -149,4 +149,3 @@ fast smoke runs, and CI never trains anything.
 
 MIT for the code in this repository. PTB-XL is distributed by PhysioNet under
 its own license and is not redistributed here.
-# fedecg-lab
