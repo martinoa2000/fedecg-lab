@@ -1,0 +1,47 @@
+# Base configuration shared by every experiment.
+#
+# Experiment configs inherit from this file with `extends: default.yaml` and
+# override only what they change. The diff between a child config and this file
+# is therefore exactly the independent variable of that experiment.
+
+seed: 42
+
+data:
+  sampling_rate_hz: 100
+  # The official PTB-XL split. Folds 9 and 10 were human-validated, so they are
+  # reserved for validation and test.
+  train_folds: [1, 2, 3, 4, 5, 6, 7, 8]
+  val_fold: 9
+  test_fold: 10
+  # Keep only this many training records, for fast smoke runs on a laptop.
+  # `null` uses the full training set.
+  subsample: null
+  preprocess:
+    # Removes baseline wander below 0.5 Hz and high-frequency muscle noise,
+    # while keeping the diagnostic band of a 12-lead ECG.
+    bandpass_low_hz: 0.5
+    bandpass_high_hz: 40.0
+    normalize: per_lead
+
+model:
+  name: resnet1d
+  base_channels: 32
+  blocks_per_stage: [2, 2, 2]
+  # GroupNorm rather than BatchNorm, so the identical architecture can be
+  # trained under Opacus in the differential privacy phase.
+  norm_groups: 8
+  dropout: 0.2
+
+training:
+  epochs: 30
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  early_stopping_patience: 5
+  early_stopping_metric: val_macro_auroc
+  num_workers: 0
+  device: auto  # auto | cpu | cuda | mps
+
+tracking:
+  enabled: true
+  experiment_name: fedecg
