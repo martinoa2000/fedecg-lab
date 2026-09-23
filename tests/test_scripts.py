@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import json
 
+import torch
+
 from fedecg.paths import PROJECT_ROOT
 
 
@@ -74,3 +76,33 @@ class TestExportDashboard:
         labels = {r["ecg_id"]: r["labels"] for r in signals["records"]}
         for cls, ids in signals["examples"].items():
             assert all(labels[i] == [cls] for i in ids)
+
+
+class TestTrainCentralized:
+    def test_trains_and_writes_metrics_history_and_checkpoint(self, fake_ptbxl, tmp_path):
+        script = load_script("train_centralized")
+        config = tmp_path / "tiny.yaml"
+        config.write_text(
+            "extends: smoke.yaml\n"
+            "model: {base_channels: 8, blocks_per_stage: [1], norm_groups: 4}\n"
+            "training: {epochs: 1, batch_size: 4, device: cpu}\n"
+        )
+        tables, checkpoints = tmp_path / "tables", tmp_path / "ckpt"
+
+        exit_code = script.main(
+            [
+                "--config", str(config),
+                "--root", str(fake_ptbxl),
+                "--no-cache",
+                "--tables", str(tables),
+                "--checkpoints", str(checkpoints),
+            ]
+        )  # fmt: skip
+
+        assert exit_code == 0
+        assert {p.name for p in tables.iterdir()} == {
+            "tiny_test_metrics.csv",
+            "tiny_history.csv",
+        }
+        state = torch.load(checkpoints / "tiny.pt", weights_only=False)
+        assert set(state) >= {"model_state", "standardizer", "thresholds", "config"}

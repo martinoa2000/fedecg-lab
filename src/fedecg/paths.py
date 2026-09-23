@@ -29,6 +29,9 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = RESULTS_DIR / "figures"
 TABLES_DIR = RESULTS_DIR / "tables"
 
+CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
+"""Trained model weights (`*.pt`). Git-ignored."""
+
 MLRUNS_DIR = PROJECT_ROOT / "mlruns"
 """Local MLflow tracking store. Git-ignored."""
 

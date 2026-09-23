@@ -1,0 +1,13 @@
+# A two-minute end-to-end run on a laptop: checks that the whole pipeline works
+# before committing to a full training run. Its numbers mean nothing.
+
+extends: centralized.yaml
+
+data:
+  subsample: 1000
+
+training:
+  epochs: 2
+
+tracking:
+  enabled: false

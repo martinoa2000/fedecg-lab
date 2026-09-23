@@ -12,6 +12,7 @@
 # Experiment tracking and artifacts
 mlruns/
 mlartifacts/
+checkpoints/
 *.ckpt
 *.pt
 *.pth
