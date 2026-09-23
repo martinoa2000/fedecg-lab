@@ -1,0 +1,8 @@
+# Phase 4: FedAvg across 10 hospitals holding random (IID) shares.
+
+extends: federated.yaml
+
+experiment: {phase: 4, setting: "FedAvg, IID, 10 hospitals"}
+
+federated:
+  n_clients: 10

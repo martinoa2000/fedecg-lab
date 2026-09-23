@@ -6,8 +6,8 @@ Contents:
                 load waveforms with `wfdb`, cache them as one `.npz`.
     preprocess: Zero-phase band-pass filtering and per-lead standardization.
     stats:      Label distribution, co-occurrence and cardinality tables.
-
-Planned:
+    pipeline:   Config -> preprocessed train / validation / test arrays, shared
+                by every experiment script.
     partition:  Split the training set across simulated hospitals (IID,
-                metadata-based, and Dirichlet label skew).
+                by recording site or device, and Dirichlet label skew).
 """

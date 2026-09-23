@@ -70,16 +70,54 @@ export interface Signals {
 
 export interface ExperimentRow {
   phase: number;
+  /** Config file stem; unique per row. */
+  run: string;
   setting: string;
+  algorithm?: "centralized" | "fedavg" | "fedprox" | string;
+  partition?: "none" | "iid" | "site" | "device" | "dirichlet" | string;
+  n_clients?: number | null;
   macro_auroc: number;
+  macro_f1?: number | null;
+  auroc_NORM?: number;
+  auroc_MI?: number;
+  auroc_STTC?: number;
+  auroc_CD?: number;
+  auroc_HYP?: number;
+  /** Epoch (centralised) or round (federated) the model was selected at. */
+  best_step?: number | null;
+  steps_run?: number | null;
+  communication_mb?: number | null;
   epsilon?: number | null;
-  [column: string]: unknown;
+  seconds?: number | null;
+}
+
+export interface CurvePoint {
+  /** Epoch for centralised runs, round for federated ones. */
+  step: number;
+  train_loss: number;
+  val_loss: number;
+  val_macro_auroc: number;
+}
+
+export type ClientRow = MixRow & { client: string };
+
+export interface PublishedResult {
+  model: string;
+  macro_auroc: number;
+  source: string;
+}
+
+export interface Experiments {
+  rows: ExperimentRow[];
+  histories: Record<string, CurvePoint[]>;
+  clients: Record<string, ClientRow[]>;
+  published: PublishedResult[];
 }
 
 export interface AppData {
   dataset: Dataset;
   signals: Signals;
-  experiments: ExperimentRow[];
+  experiments: Experiments;
 }
 
 export type LoadState =
@@ -99,10 +137,23 @@ export function useAppData(): LoadState {
     Promise.all([
       getJson<Dataset>("dataset.json"),
       getJson<Signals>("signals.json"),
-      getJson<{ rows: ExperimentRow[] }>("experiments.json"),
+      getJson<Partial<Experiments>>("experiments.json"),
     ])
       .then(([dataset, signals, experiments]) =>
-        setState({ status: "ready", data: { dataset, signals, experiments: experiments.rows } }),
+        setState({
+          status: "ready",
+          data: {
+            dataset,
+            signals,
+            // Older exports only carried `rows`.
+            experiments: {
+              rows: experiments.rows ?? [],
+              histories: experiments.histories ?? {},
+              clients: experiments.clients ?? {},
+              published: experiments.published ?? [],
+            },
+          },
+        }),
       )
       .catch(() => setState({ status: "missing" }));
   }, []);

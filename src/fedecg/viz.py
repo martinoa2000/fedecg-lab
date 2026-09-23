@@ -6,10 +6,11 @@ cell and a script that saves a PNG into `results/figures/` without a display.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.figure import Figure
 
 from fedecg.data.constants import LEAD_NAMES, NUM_LEADS, SAMPLING_RATE_HZ
@@ -87,5 +88,37 @@ def plot_class_examples(
         ax.set_ylabel(name, rotation=0, ha="right", va="center")
         ax.grid(True, alpha=0.3)
     axes[-1].set_xlabel(f"time (s), lead {LEAD_NAMES[lead]}")
+    fig.tight_layout()
+    return fig
+
+
+def plot_curves(
+    curves: Mapping[str, pd.DataFrame],
+    *,
+    metric: str = "val_macro_auroc",
+    step_label: str = "epoch / round",
+    reference: float | None = None,
+    reference_label: str = "reference",
+) -> Figure:
+    """One line per run of `metric` against the epoch or round.
+
+    Args:
+        curves: Run label -> a history table with an `epoch` or `round` column,
+            as written by the training scripts.
+        metric: History column to plot.
+        step_label: X-axis label.
+        reference: Optional horizontal line, e.g. the centralized test AUROC.
+        reference_label: Legend label for `reference`.
+    """
+    fig, ax = plt.subplots(figsize=(8, 4))
+    for label, history in curves.items():
+        step = "epoch" if "epoch" in history.columns else "round"
+        ax.plot(history[step], history[metric], linewidth=1.6, label=label)
+    if reference is not None:
+        ax.axhline(reference, color="0.4", linewidth=1, label=reference_label)
+    ax.set_xlabel(step_label)
+    ax.set_ylabel(metric.replace("_", " "))
+    ax.grid(True, alpha=0.3)
+    ax.legend(frameon=False)
     fig.tight_layout()
     return fig

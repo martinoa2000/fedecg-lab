@@ -5,3 +5,5 @@
 # against.
 
 extends: default.yaml
+
+experiment: {phase: 3, setting: "Centralized"}

@@ -4,9 +4,11 @@
 Writes into `app/public/data/` (git-ignored, since it contains PTB-XL
 waveforms, which this repository does not redistribute):
 
-    dataset.json    label statistics, split sizes, site and device breakdowns
-    signals.json    a few example records per superclass, raw and band-passed
-    experiments.json  rows of `results/tables/experiments.csv`, if it exists
+    dataset.json      label statistics, split sizes, site and device breakdowns
+    signals.json      a few example records per superclass, raw and band-passed
+    experiments.json  rows of `results/tables/experiments.csv`, each run's
+                      training curve and, for federated runs, every hospital's
+                      size and label mix
 
 Signals are stored as integer microvolts to keep the file small; the app
 divides by 1000 to get millivolts back.
@@ -48,6 +50,15 @@ from fedecg.data.stats import (
 from fedecg.paths import PROJECT_ROOT, PTBXL_DIR, TABLES_DIR, ensure_dir
 
 APP_DATA_DIR = PROJECT_ROOT / "app" / "public" / "data"
+
+PUBLISHED = [
+    {
+        "model": "resnet1d_wang",
+        "macro_auroc": 0.930,
+        "source": "Strodthoff et al. (2021), superdiagnostic task, 100 Hz",
+    },
+]
+"""Published PTB-XL results the baseline is compared against."""
 
 
 def _records(frame: pd.DataFrame, key: str) -> list[dict]:
@@ -145,6 +156,34 @@ def signal_examples(meta: pd.DataFrame, config: dict, root: Path, per_class: int
     return {"fs": fs, "leads": list(LEAD_NAMES), "examples": examples, "records": records}
 
 
+def experiment_results(tables: Path) -> dict:
+    """Summary rows plus, per run, its training curve and client breakdown.
+
+    Curves are keyed by run name. Centralized histories are indexed by epoch
+    and federated ones by round; both are exported as a common `step`.
+    """
+    summary = tables / "experiments.csv"
+    if not summary.exists():
+        return {"rows": [], "histories": {}, "clients": {}, "published": PUBLISHED}
+    table = pd.read_csv(summary)
+    histories, clients = {}, {}
+    for run in table["run"]:
+        history = tables / f"{run}_history.csv"
+        if history.exists():
+            curve = pd.read_csv(history).rename(columns={"epoch": "step", "round": "step"})
+            keep = ["step", "train_loss", "val_loss", "val_macro_auroc"]
+            histories[run] = json.loads(curve[keep].round(4).to_json(orient="records"))
+        breakdown = tables / f"{run}_clients.csv"
+        if breakdown.exists():
+            clients[run] = json.loads(pd.read_csv(breakdown).to_json(orient="records"))
+    return {
+        "rows": json.loads(table.to_json(orient="records")),
+        "histories": histories,
+        "clients": clients,
+        "published": PUBLISHED,
+    }
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -152,6 +191,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", default="default.yaml", help="Config for split/filter")
     parser.add_argument("--out", type=Path, default=APP_DATA_DIR, help="Output directory")
     parser.add_argument("--examples", type=int, default=4, help="Example records per class")
+    parser.add_argument(
+        "--tables", type=Path, default=TABLES_DIR, help="Where experiment results are read from"
+    )
     return parser.parse_args(argv)
 
 
@@ -168,13 +210,7 @@ def main(argv: list[str] | None = None) -> int:
         "dataset.json": dataset_summary(meta, raw_meta, config),
         "signals.json": signal_examples(meta, config, args.root, args.examples),
     }
-    experiments = TABLES_DIR / "experiments.csv"
-    rows = (
-        json.loads(pd.read_csv(experiments).to_json(orient="records"))
-        if experiments.exists()
-        else []
-    )
-    outputs["experiments.json"] = {"rows": rows}
+    outputs["experiments.json"] = experiment_results(args.tables)
 
     for name, payload in outputs.items():
         (out / name).write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")

@@ -1159,7 +1159,7 @@ table.mix {
   border-top: 1px solid var(--hairline);
 }
 
-.phases .num {
+.phases > li > .num {
   font-family: var(--font-cond);
   font-size: 2rem;
   font-weight: 600;
@@ -1249,4 +1249,328 @@ table.mix {
   .button-outline:hover {
     background: var(--page);
   }
+}
+
+/* ------------------------------------------------------ results: dot plot */
+
+.phases .body.wide {
+  max-width: none;
+  gap: 16px;
+}
+
+.phases .body.wide > p {
+  max-width: 72ch;
+}
+
+.chart-title {
+  font-family: var(--font-cond);
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 12px;
+}
+
+.chart-note {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin-top: 16px;
+}
+
+.dotplot {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
+  column-gap: 16px;
+}
+
+.dot-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-height: 36px;
+  font-size: 0.875rem;
+}
+
+.dot-row .name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 16rem;
+}
+
+.dot-row .value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.dot-track {
+  position: relative;
+  align-self: stretch;
+  /* Keeps dots at either end inside the track. */
+  margin: 0 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.dot-refs,
+.dot-axis {
+  min-height: 24px;
+}
+
+.dot-refs .dot-track,
+.dot-axis .dot-track {
+  border-bottom: 0;
+}
+
+.ref-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--axis);
+}
+
+.ref-label,
+.tick {
+  position: absolute;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dot-axis .tick {
+  top: 4px;
+  bottom: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.dot-link {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--seq-2);
+  border-radius: 1px;
+}
+
+/* 24px hit target around a 10px dot. */
+.dot-hit {
+  position: absolute;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  cursor: default;
+}
+
+.dot,
+.dot-key {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c, var(--seq-4));
+  box-shadow: 0 0 0 2px var(--surface);
+  transition: transform 160ms var(--ease-out);
+}
+
+.dot-hit[data-hollow] .dot,
+.dot-key[data-hollow] {
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 2px var(--c, var(--seq-4)),
+    0 0 0 2px var(--surface);
+}
+
+.dot-key {
+  --c: var(--seq-4);
+}
+
+.dot-hit:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+}
+
+.dot-hit:focus-visible .dot {
+  transform: scale(1.3);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dot-hit:hover .dot {
+    transform: scale(1.3);
+  }
+}
+
+/* --------------------------------------------------- results: curve chart */
+
+.curve {
+  position: relative;
+  min-width: 0;
+}
+
+.curve:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: var(--radius-s);
+}
+
+.curve svg {
+  display: block;
+  overflow: visible;
+}
+
+.curve .grid {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.curve .axis-text {
+  fill: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.curve .crosshair {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.curve-tip {
+  position: absolute;
+  top: 0;
+  z-index: 5;
+  pointer-events: none;
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 0.8125rem;
+  padding: 8px 10px;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.curve-tip-head {
+  opacity: 0.75;
+}
+
+.curve-tip-row {
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.curve-tip-row i,
+.line-key {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.curve-tip-row span {
+  opacity: 0.8;
+}
+
+/* ------------------------------------------------- results: figures, table */
+
+.pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+  margin: 4px 0 8px;
+}
+
+.pair div {
+  display: grid;
+  gap: 2px;
+}
+
+.pair dt {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.pair dd {
+  margin: 0;
+  font-family: var(--font-cond);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.hospitals {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.hospitals-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hospitals-head .chart-title {
+  margin: 0;
+}
+
+.hospitals .chart-sub {
+  margin-bottom: 4px;
+}
+
+table.runs {
+  min-width: 640px;
+}
+
+@media (max-width: 720px) {
+  .phases > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .phases > li > .num {
+    grid-row: auto;
+    font-size: 1.5rem;
+  }
+
+  .dot-row .name {
+    max-width: 9rem;
+  }
+}
+
+.dot-group {
+  grid-column: 1 / -1;
+  padding: 14px 0 2px;
+  font-family: var(--font-cond);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.dot-group:first-of-type {
+  padding-top: 0;
+}
+
+/* Let chart columns shrink to the viewport: the curve chart measures its
+   container, so the container must not size itself to the chart. */
+.phases .body,
+.phases .body > *,
+.grid-2 > * {
+  min-width: 0;
+}
+
+.curve {
+  width: 100%;
+  overflow: hidden;
 }

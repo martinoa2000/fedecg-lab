@@ -1,0 +1,16 @@
+# A two-minute end-to-end federated run: checks the pipeline, not the method.
+
+extends: federated.yaml
+
+experiment: {phase: 4, setting: smoke}
+
+data:
+  subsample: 1000
+
+federated:
+  n_clients: 3
+  rounds: 2
+  min_client_records: 1
+
+tracking:
+  enabled: false

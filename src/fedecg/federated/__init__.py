@@ -1,9 +1,9 @@
 """Flower clients, strategies and simulation entry points.
 
-Planned contents:
-    client:     A Flower client wrapping the shared training loop.
-    strategy:   FedAvg and FedProx configuration.
-    simulation: Run N simulated hospitals in one process.
+Contents:
+    client:     A Flower `NumPyClient` wrapping the shared training loop.
+    strategy:   Flower's FedAvg and FedProx, configured from a config.
+    simulation: Drive N simulated hospitals round by round in one process.
 
 Everything runs in simulation mode: no network, no real hospitals. The point is
 to reproduce the statistical consequences of decentralization (non-IID data,

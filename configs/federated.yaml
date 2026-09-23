@@ -1,0 +1,22 @@
+# Phases 4 and 5: settings shared by every federated experiment.
+#
+# Extends the centralized baseline, so the model, data split, preprocessing and
+# training recipe are identical; only the `federated` section is new. With
+# every hospital taking part in every round and one local epoch per round, a
+# round is one pass over the whole training set, so `rounds` here and `epochs`
+# in the baseline cost the same compute.
+
+extends: centralized.yaml
+
+federated:
+  partition: iid          # iid | site | device | dirichlet
+  n_clients: 10           # iid and dirichlet only; site/device follow the metadata
+  dirichlet_alpha: 0.3    # dirichlet only: smaller = more label skew
+  # site/device: values with fewer training records than this are pooled into
+  # one "other" hospital. dirichlet: minimum records per hospital.
+  min_client_records: 500
+  strategy: fedavg        # fedavg | fedprox
+  proximal_mu: 0.01       # fedprox only
+  rounds: 50
+  local_epochs: 1
+  fraction_fit: 1.0       # share of hospitals training in each round

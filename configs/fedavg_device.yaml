@@ -1,0 +1,11 @@
+# Phase 5: FedAvg with one hospital per ECG recording device.
+# Devices with at least 500 training records each become a hospital; the rest
+# are pooled.
+
+extends: federated.yaml
+
+experiment: {phase: 5, setting: "FedAvg, by device"}
+
+federated:
+  partition: device
+  strategy: fedavg

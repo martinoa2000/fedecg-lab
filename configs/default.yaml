@@ -33,11 +33,19 @@ model:
   dropout: 0.2
 
 training:
-  epochs: 30
+  epochs: 50
   batch_size: 64
   learning_rate: 0.001
   weight_decay: 0.0001
-  early_stopping_patience: 5
+  # Linear warmup over the first 5% of steps, then half-cosine decay to zero.
+  lr_schedule: cosine
+  warmup_fraction: 0.05
+  # Train on random 2.5 s crops (augmentation, and 4x cheaper per step).
+  # Validation and test always score the whole 10 s record; the model ends in
+  # global pooling, so it accepts either length. Chosen on the validation fold
+  # only: see notebooks/02_centralized_baseline.ipynb.
+  crop_samples: 250
+  early_stopping_patience: 10
   early_stopping_metric: val_macro_auroc
   num_workers: 0
   device: auto  # auto | cpu | cuda | mps
