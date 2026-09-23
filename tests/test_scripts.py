@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import json
 
+import pandas as pd
+import pytest
 import torch
 
 from fedecg.paths import PROJECT_ROOT
@@ -48,8 +50,13 @@ class TestExportDashboard:
         script = load_script("export_dashboard")
 
         exit_code = script.main(
-            ["--root", str(fake_ptbxl), "--out", str(tmp_path), "--examples", "2"]
-        )
+            [
+                "--root", str(fake_ptbxl),
+                "--out", str(tmp_path),
+                "--examples", "2",
+                "--tables", str(tmp_path / "none"),
+            ]
+        )  # fmt: skip
 
         assert exit_code == 0
         assert {p.name for p in tmp_path.iterdir()} == {
@@ -57,6 +64,35 @@ class TestExportDashboard:
             "signals.json",
             "experiments.json",
         }
+
+    def test_experiments_carry_curves_and_client_mixes(self, fake_ptbxl, tmp_path):
+        script = load_script("export_dashboard")
+        tables = tmp_path / "tables"
+        tables.mkdir()
+        pd.DataFrame(
+            [
+                {"phase": 3, "run": "central", "setting": "C", "macro_auroc": 0.9},
+                {"phase": 5, "run": "fed", "setting": "F", "macro_auroc": 0.8},
+            ]
+        ).to_csv(tables / "experiments.csv", index=False)
+        history = {"train_loss": [0.5], "val_loss": [0.4], "val_macro_auroc": [0.8]}
+        pd.DataFrame({"epoch": [1], **history}).to_csv(tables / "central_history.csv", index=False)
+        pd.DataFrame({"round": [1], **history}).to_csv(tables / "fed_history.csv", index=False)
+        pd.DataFrame({"client": ["site 0"], "n_records": [10], "NORM": [50.0]}).to_csv(
+            tables / "fed_clients.csv", index=False
+        )
+        out = tmp_path / "out"
+
+        script.main(["--root", str(fake_ptbxl), "--out", str(out), "--tables", str(tables)])
+
+        experiments = json.loads((out / "experiments.json").read_text())
+        assert [r["run"] for r in experiments["rows"]] == ["central", "fed"]
+        assert experiments["histories"]["central"][0]["step"] == 1
+        assert experiments["histories"]["fed"][0]["step"] == 1
+        assert experiments["clients"] == {
+            "fed": [{"client": "site 0", "n_records": 10, "NORM": 50.0}]
+        }
+        assert experiments["published"][0]["macro_auroc"] == 0.93
 
     def test_signals_are_integer_microvolts_per_lead(self, fake_ptbxl, tmp_path):
         script = load_script("export_dashboard")
@@ -103,6 +139,50 @@ class TestTrainCentralized:
         assert {p.name for p in tables.iterdir()} == {
             "tiny_test_metrics.csv",
             "tiny_history.csv",
+            "experiments.csv",
         }
         state = torch.load(checkpoints / "tiny.pt", weights_only=False)
         assert set(state) >= {"model_state", "standardizer", "thresholds", "config"}
+
+
+class TestTrainFederated:
+    @pytest.mark.parametrize("partition", ["iid", "site"])
+    def test_trains_and_writes_metrics_history_clients_and_summary(
+        self, fake_ptbxl, tmp_path, partition
+    ):
+        script = load_script("train_federated")
+        config = tmp_path / f"tiny_{partition}.yaml"
+        config.write_text(
+            "extends: smoke_federated.yaml\n"
+            "data: {subsample: null}\n"
+            "model: {base_channels: 8, blocks_per_stage: [1], norm_groups: 4}\n"
+            "training: {batch_size: 4, device: cpu}\n"
+            f"federated: {{partition: {partition}, n_clients: 2, rounds: 2}}\n"
+        )
+        tables, checkpoints = tmp_path / "tables", tmp_path / "ckpt"
+
+        exit_code = script.main(
+            [
+                "--config", str(config),
+                "--root", str(fake_ptbxl),
+                "--no-cache",
+                "--tables", str(tables),
+                "--checkpoints", str(checkpoints),
+            ]
+        )  # fmt: skip
+
+        assert exit_code == 0
+        name = f"tiny_{partition}"
+        assert {p.name for p in tables.iterdir()} == {
+            f"{name}_test_metrics.csv",
+            f"{name}_history.csv",
+            f"{name}_clients.csv",
+            "experiments.csv",
+        }
+        history = pd.read_csv(tables / f"{name}_history.csv")
+        assert list(history["round"]) == [1, 2]
+        summary = pd.read_csv(tables / "experiments.csv")
+        assert summary.loc[0, "run"] == name
+        assert summary.loc[0, "partition"] == partition
+        state = torch.load(checkpoints / f"{name}.pt", weights_only=False)
+        assert set(state) >= {"model_state", "thresholds", "best_round", "client_names"}

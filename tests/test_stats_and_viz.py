@@ -98,3 +98,16 @@ class TestPlots:
         fig = plot_class_examples(signals, ["A", "B", "C"])
         assert len(fig.axes) == 3
         plt.close(fig)
+
+
+def test_plot_curves_draws_one_line_per_run_plus_reference():
+    import pandas as pd
+
+    from fedecg.viz import plot_curves
+
+    curves = {
+        "centralized": pd.DataFrame({"epoch": [1, 2, 3], "val_macro_auroc": [0.8, 0.85, 0.9]}),
+        "fedavg": pd.DataFrame({"round": [1, 2], "val_macro_auroc": [0.7, 0.8]}),
+    }
+    fig = plot_curves(curves, reference=0.9)
+    assert len(fig.axes[0].lines) == 3

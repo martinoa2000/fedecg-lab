@@ -1,0 +1,12 @@
+# Phase 5: FedAvg across 10 hospitals with Dirichlet(0.3) label skew.
+
+extends: federated.yaml
+
+experiment: {phase: 5, setting: "FedAvg, label skew (alpha 0.3)"}
+
+federated:
+  partition: dirichlet
+  n_clients: 10
+  dirichlet_alpha: 0.3
+  min_client_records: 300
+  strategy: fedavg

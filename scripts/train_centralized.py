@@ -13,6 +13,7 @@ Writes, named after the config (`centralized` by default):
 
     results/tables/<name>_test_metrics.csv   per-class AUROC / F1 / threshold on test
     results/tables/<name>_history.csv        per-epoch losses and val AUROC
+    results/tables/experiments.csv           one summary row, replaced on rerun
     checkpoints/<name>.pt                    best weights, standardizer, thresholds
 
 and logs the same to MLflow when `tracking.enabled` is true.
@@ -26,22 +27,22 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-import numpy as np
 import pandas as pd
 import torch
 
 from fedecg.config import load_config
-from fedecg.data.preprocess import preprocess_splits
-from fedecg.data.ptbxl import load_dataset, split_by_folds
+from fedecg.data.pipeline import prepare_data
 from fedecg.models.resnet1d import build_model, count_parameters
 from fedecg.paths import CACHE_DIR, CHECKPOINT_DIR, PTBXL_DIR, TABLES_DIR, ensure_dir
-from fedecg.seed import new_generator, set_seed
-from fedecg.training.loop import fit, make_loader, predict, resolve_device
-from fedecg.training.metrics import best_f1_thresholds, metrics_table
+from fedecg.seed import set_seed
+from fedecg.training.evaluate import final_evaluation
+from fedecg.training.loop import fit, make_loader, resolve_device
+from fedecg.training.results import experiment_row, record_experiment
 from fedecg.training.tracking import start_run
 
 
@@ -58,6 +59,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--checkpoints", type=Path, default=CHECKPOINT_DIR, help="Output for weights"
     )
+    parser.add_argument(
+        "--experiments",
+        type=Path,
+        default=None,
+        help="Summary table to update (default: <tables>/experiments.csv)",
+    )
     return parser.parse_args(argv)
 
 
@@ -66,41 +73,26 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config = load_config(args.config)
     name = Path(args.config).stem
-    data_cfg, train_cfg = config["data"], config["training"]
-    fs = data_cfg["sampling_rate_hz"]
+    train_cfg = config["training"]
     seed = int(config["seed"])
     set_seed(seed)
+    started = time.perf_counter()
 
-    meta, arrays = load_dataset(
-        args.root,
-        sampling_rate=fs,
-        cache_path=None if args.no_cache else args.cache,
-        progress=True,
-    )
-    split = split_by_folds(
-        meta,
-        train_folds=data_cfg["train_folds"],
-        val_fold=data_cfg["val_fold"],
-        test_fold=data_cfg["test_fold"],
-    )
-    train_ids = split.train.to_numpy()
-    if data_cfg.get("subsample") is not None and data_cfg["subsample"] < len(train_ids):
-        rng = new_generator(seed)
-        train_ids = np.sort(rng.choice(train_ids, size=data_cfg["subsample"], replace=False))
-    train, val, test = (arrays.select(ids) for ids in (train_ids, split.val, split.test))
-    print(f"{len(train)} train, {len(val)} val, {len(test)} test records")
-
-    x_train, others, standardizer = preprocess_splits(
-        train.signals, {"val": val.signals, "test": test.signals}, data_cfg["preprocess"], fs=fs
-    )
+    data = prepare_data(config, root=args.root, cache_path=None if args.no_cache else args.cache)
+    print(f"{len(data.x_train)} train, {len(data.x_val)} val, {len(data.x_test)} test records")
 
     batch_size = int(train_cfg["batch_size"])
-    workers = int(train_cfg.get("num_workers", 0))
     train_loader = make_loader(
-        x_train, train.labels, batch_size=batch_size, shuffle=True, seed=seed, num_workers=workers
+        data.x_train,
+        data.y_train,
+        batch_size=batch_size,
+        shuffle=True,
+        seed=seed,
+        num_workers=int(train_cfg.get("num_workers", 0)),
+        crop_samples=train_cfg.get("crop_samples"),
     )
-    val_loader = make_loader(others["val"], val.labels, batch_size=batch_size, shuffle=False)
-    test_loader = make_loader(others["test"], test.labels, batch_size=batch_size, shuffle=False)
+    val_loader = make_loader(data.x_val, data.y_val, batch_size=batch_size, shuffle=False)
+    test_loader = make_loader(data.x_test, data.y_test, batch_size=batch_size, shuffle=False)
 
     device = resolve_device(train_cfg.get("device", "auto"))
     model = build_model(config["model"]).to(device)
@@ -108,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
 
     with start_run(config.get("tracking", {}), run_name=name) as tracker:
         tracker.log_params(config)
-        tracker.log_params({"n_train": len(train), "n_parameters": count_parameters(model)})
+        tracker.log_params({"n_train": len(data.x_train), "n_parameters": count_parameters(model)})
 
         result = fit(
             model,
@@ -123,11 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"best epoch {result.best_epoch}: val macro AUROC {result.best_score:.4f}")
 
-        val_prob, val_true = predict(model, val_loader, device)
-        thresholds = best_f1_thresholds(val_true, val_prob)
-        test_prob, test_true = predict(model, test_loader, device)
-        table = pd.DataFrame(metrics_table(test_true, test_prob, thresholds)).T
-        table.index.name = "superclass"
+        table, thresholds = final_evaluation(model, val_loader, test_loader, device, train_cfg)
         print(table.round(4).to_string())
 
         tables = ensure_dir(args.tables)
@@ -141,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "model_state": model.state_dict(),
                 "config": config,
-                "standardizer": standardizer.to_dict() if standardizer else None,
+                "standardizer": data.standardizer.to_dict() if data.standardizer else None,
                 "thresholds": thresholds.tolist(),
                 "best_epoch": result.best_epoch,
             },
@@ -157,6 +145,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         for path in (metrics_path, history_path):
             tracker.log_artifact(path)
+
+    record_experiment(
+        experiment_row(
+            config,
+            name,
+            table,
+            algorithm="centralized",
+            partition="none",
+            n_clients=1,
+            best_step=result.best_epoch,
+            steps_run=len(result.history),
+            communication_mb=0.0,
+            seconds=round(time.perf_counter() - started, 1),
+        ),
+        args.experiments or tables / "experiments.csv",
+    )
 
     print(f"Tables written to {tables}\nCheckpoint written to {checkpoint_path}")
     return 0

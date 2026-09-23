@@ -1,0 +1,10 @@
+# Phase 5: FedProx with one hospital per PTB-XL recording site.
+# Sites 0, 1 and 2 each become a hospital; the remaining sites are pooled.
+
+extends: federated.yaml
+
+experiment: {phase: 5, setting: "FedProx, by site"}
+
+federated:
+  partition: site
+  strategy: fedprox
