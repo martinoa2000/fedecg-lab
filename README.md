@@ -80,7 +80,7 @@ Run the test suite:
 uv run pytest
 ```
 
-Explore the data in the dashboard (needs [Node.js](https://nodejs.org/) 20+):
+Explore the data in the dashboard (needs [Node.js](https://nodejs.org/) 22+):
 
 ```bash
 uv run python scripts/export_dashboard.py
