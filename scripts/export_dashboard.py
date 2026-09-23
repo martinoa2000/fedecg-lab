@@ -1,0 +1,186 @@
+#!/usr/bin/env python
+"""Export the data the dashboard in `app/` reads.
+
+Writes into `app/public/data/` (git-ignored, since it contains PTB-XL
+waveforms, which this repository does not redistribute):
+
+    dataset.json    label statistics, split sizes, site and device breakdowns
+    signals.json    a few example records per superclass, raw and band-passed
+    experiments.json  rows of `results/tables/experiments.csv`, if it exists
+
+Signals are stored as integer microvolts to keep the file small; the app
+divides by 1000 to get millivolts back.
+
+Usage:
+    python scripts/export_dashboard.py
+    python scripts/export_dashboard.py --examples 6
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+import numpy as np
+import pandas as pd
+
+from fedecg.config import load_config
+from fedecg.data.constants import LEAD_NAMES, SUPERCLASSES
+from fedecg.data.preprocess import filter_from_config
+from fedecg.data.ptbxl import (
+    attach_labels,
+    load_diagnostic_map,
+    load_metadata,
+    load_signals,
+    split_by_folds,
+)
+from fedecg.data.stats import (
+    cooccurrence,
+    label_cardinality,
+    label_combinations,
+    label_distribution,
+    records_by,
+)
+from fedecg.paths import PROJECT_ROOT, PTBXL_DIR, TABLES_DIR, ensure_dir
+
+APP_DATA_DIR = PROJECT_ROOT / "app" / "public" / "data"
+
+
+def _records(frame: pd.DataFrame, key: str) -> list[dict]:
+    """Turn a table indexed by `key` into a list of JSON-ready rows."""
+    table = frame.reset_index()
+    table = table.rename(columns={table.columns[0]: key})
+    return json.loads(table.to_json(orient="records"))
+
+
+def pick_examples(meta: pd.DataFrame, per_class: int) -> dict[str, list[int]]:
+    """Choose single-label records per superclass, human-validated first."""
+    labels = meta[list(SUPERCLASSES)].astype(bool)
+    single = labels.sum(axis=1) == 1
+    validated = meta["validated_by_human"].astype(bool)
+    chosen = {}
+    for name in SUPERCLASSES:
+        pool = meta[labels[name] & single]
+        ordered = pd.concat([pool[validated.loc[pool.index]], pool[~validated.loc[pool.index]]])
+        chosen[name] = [int(i) for i in ordered.index[:per_class]]
+    return chosen
+
+
+def dataset_summary(meta: pd.DataFrame, raw_meta: pd.DataFrame, config: dict) -> dict:
+    """Everything the Dataset view shows, computed from the labeled metadata."""
+    data_cfg = config["data"]
+    split = split_by_folds(
+        meta,
+        train_folds=data_cfg["train_folds"],
+        val_fold=data_cfg["val_fold"],
+        test_fold=data_cfg["test_fold"],
+    )
+    ages = meta.loc[meta["age"] < 300, "age"]
+    return {
+        "superclasses": list(SUPERCLASSES),
+        "records_total": len(raw_meta),
+        "records_labeled": len(meta),
+        "patients": int(meta["patient_id"].nunique()),
+        "split": {"train": len(split.train), "val": len(split.val), "test": len(split.test)},
+        "split_folds": {
+            "train": data_cfg["train_folds"],
+            "val": data_cfg["val_fold"],
+            "test": data_cfg["test_fold"],
+        },
+        "sampling_rate_hz": data_cfg["sampling_rate_hz"],
+        "bandpass_hz": [
+            data_cfg["preprocess"]["bandpass_low_hz"],
+            data_cfg["preprocess"]["bandpass_high_hz"],
+        ],
+        "distribution": _records(label_distribution(meta, split), "superclass"),
+        "cooccurrence": cooccurrence(meta).astype(int).values.tolist(),
+        "cardinality": _records(label_cardinality(meta).to_frame("n_records"), "n_labels"),
+        "combinations": _records(label_combinations(meta).to_frame("n_records"), "labels"),
+        "by_site": _records(records_by(meta, "site"), "site"),
+        "by_device": _records(records_by(meta, "device"), "device"),
+        "age": {
+            "median": float(ages.median()),
+            "histogram": np.histogram(ages, bins=range(0, 95, 5))[0].tolist(),
+            "bin_width": 5,
+        },
+        "sex": {"male": int((meta["sex"] == 0).sum()), "female": int((meta["sex"] == 1).sum())},
+    }
+
+
+def signal_examples(meta: pd.DataFrame, config: dict, root: Path, per_class: int) -> dict:
+    """Raw and band-passed waveforms for the example records."""
+    data_cfg = config["data"]
+    fs = data_cfg["sampling_rate_hz"]
+    examples = pick_examples(meta, per_class)
+    ids = [i for name in SUPERCLASSES for i in examples[name]]
+    raw = load_signals(meta.loc[ids], root, sampling_rate=fs)
+    filtered = filter_from_config(raw, data_cfg["preprocess"], fs=fs)
+
+    def microvolts(x: np.ndarray) -> list[list[int]]:
+        return np.rint(x * 1000).astype(int).tolist()
+
+    records = []
+    for k, ecg_id in enumerate(ids):
+        row = meta.loc[ecg_id]
+        records.append(
+            {
+                "ecg_id": ecg_id,
+                "labels": [c for c in SUPERCLASSES if row[c]],
+                "age": None if row["age"] >= 300 else int(row["age"]),
+                "sex": "male" if row["sex"] == 0 else "female",
+                "device": str(row["device"]).strip(),
+                "site": None if pd.isna(row["site"]) else int(row["site"]),
+                "report": str(row["report"]).strip(),
+                "scp_codes": row["scp_codes"],
+                "validated": bool(row["validated_by_human"]),
+                "strat_fold": int(row["strat_fold"]),
+                "raw": microvolts(raw[k]),
+                "filtered": microvolts(filtered[k]),
+            }
+        )
+    return {"fs": fs, "leads": list(LEAD_NAMES), "examples": examples, "records": records}
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--root", type=Path, default=PTBXL_DIR, help="PTB-XL directory")
+    parser.add_argument("--config", default="default.yaml", help="Config for split/filter")
+    parser.add_argument("--out", type=Path, default=APP_DATA_DIR, help="Output directory")
+    parser.add_argument("--examples", type=int, default=4, help="Example records per class")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Entry point."""
+    args = parse_args(argv)
+    config = load_config(args.config)
+    out = ensure_dir(args.out)
+
+    raw_meta = load_metadata(args.root)
+    meta = attach_labels(raw_meta, load_diagnostic_map(args.root))
+
+    outputs = {
+        "dataset.json": dataset_summary(meta, raw_meta, config),
+        "signals.json": signal_examples(meta, config, args.root, args.examples),
+    }
+    experiments = TABLES_DIR / "experiments.csv"
+    rows = (
+        json.loads(pd.read_csv(experiments).to_json(orient="records"))
+        if experiments.exists()
+        else []
+    )
+    outputs["experiments.json"] = {"rows": rows}
+
+    for name, payload in outputs.items():
+        (out / name).write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        print(f"{out / name}  {(out / name).stat().st_size / 1024:.0f} KB")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

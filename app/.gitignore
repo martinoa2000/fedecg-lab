@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Exported by scripts/export_dashboard.py; contains PTB-XL waveforms.
+public/data/
