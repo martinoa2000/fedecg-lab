@@ -83,6 +83,29 @@ The first training run caches all waveforms in `data/cache/` as a single
 `.npz`, so later runs skip WFDB parsing. Test metrics and the per-epoch history
 land in `results/tables/`, weights in `checkpoints/`, and every run is logged
 to MLflow (`uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`).
+Every run also writes one summary row to `results/tables/experiments.csv`,
+which the notebooks and the dashboard read.
+
+Train across simulated hospitals. Each config in `configs/` is one experiment;
+the smoke config checks the pipeline in under a minute:
+
+```bash
+uv run python scripts/train_federated.py --config smoke_federated.yaml
+
+# Phase 4: FedAvg on random (IID) splits
+for n in 5 10 20; do
+  uv run python scripts/train_federated.py --config fedavg_iid_$n.yaml
+done
+
+# Phase 5: hospitals by recording site, by device, and by Dirichlet label skew
+for p in site device dirichlet; do
+  for s in fedavg fedprox; do
+    uv run python scripts/train_federated.py --config ${s}_$p.yaml
+  done
+done
+```
+
+On an Apple M-series laptop each run takes 2 to 4 minutes.
 
 Run the test suite:
 
@@ -111,13 +134,44 @@ uv run pre-commit install
 
 - [x] **1. Setup** — project structure, pinned dependencies, pre-commit, CI, reproducible data download.
 - [x] **2. Exploration and preprocessing** — label distribution, per-class ECG visualization, filtering and normalization.
-- [ ] **3. Centralized baseline** — 1D ResNet, early stopping, MLflow tracking, comparison against published PTB-XL results.
-  *First run: test macro AUROC **0.909** (published `resnet1d_wang`: 0.930). Closing the gap (LR schedule, random-crop training) and the comparison notebook are pending.*
-- [ ] **4. Federated (IID)** — Flower simulation of N hospitals with random splits, FedAvg vs. centralized.
-- [ ] **5. Federated (non-IID)** — partitions by recording `site`/`device` and Dirichlet label skew; FedAvg vs. FedProx.
+- [x] **3. Centralized baseline** — 1D ResNet, random-crop training, cosine schedule, early stopping, MLflow tracking, comparison against published PTB-XL results ([notebook 02](notebooks/02_centralized_baseline.ipynb)).
+- [x] **4. Federated (IID)** — Flower FedAvg across 5, 10 and 20 simulated hospitals with random splits ([notebook 03](notebooks/03_federated_iid.ipynb)).
+- [x] **5. Federated (non-IID)** — hospitals by recording site, by device and by Dirichlet label skew; FedAvg vs. FedProx ([notebook 04](notebooks/04_federated_non_iid.ipynb)).
 - [ ] **6. Differential privacy** — DP-SGD with Opacus, local and federated; the performance/epsilon trade-off curve.
 - [ ] **7. Explainability** — Integrated Gradients / Grad-CAM 1D saliency overlaid on the raw signal.
 - [ ] **8. Write-up** — architecture diagram, comparative results table, reproduction instructions.
+
+## Results so far
+
+Test macro AUROC on the official test fold (fold 10), one run per setting with
+seed 42. Retraining the baseline with three seeds spans 0.915 to 0.917, so gaps
+smaller than about 0.003 are noise. Full table: `results/tables/experiments.csv`.
+
+| Setting | Hospitals | Macro AUROC | vs. centralized |
+|---|---:|---:|---:|
+| Published `resnet1d_wang` (Strodthoff et al., 2021) | 1 | 0.930 | |
+| **Centralized** (random crops, cosine LR) | 1 | **0.916** | |
+| Centralized, full-length records, constant LR | 1 | 0.909 | −0.007 |
+| FedAvg, IID | 5 | 0.908 | −0.007 |
+| FedAvg, IID | 10 | 0.899 | −0.016 |
+| FedAvg, IID | 20 | 0.892 | −0.024 |
+| FedAvg, by recording site | 4 | 0.911 | −0.004 |
+| FedAvg, by device | 8 | 0.908 | −0.007 |
+| FedAvg, Dirichlet label skew (alpha 0.3) | 10 | 0.889 | −0.026 |
+| FedProx (mu 0.01), by site / device / label skew | 4 / 8 / 10 | 0.908 / 0.906 / 0.888 | −0.008 / −0.009 / −0.028 |
+
+What the numbers say:
+
+- **Decentralization costs AUROC, and more so the more hospitals there are.**
+  At equal compute (one pass over the data per round or epoch), FedAvg is
+  still improving at round 50 when the centralized model has long peaked.
+- **Realistic heterogeneity adds little on top.** Hospitals built from real
+  sites and devices, whose label mix differs widely, score about as well as
+  the same number of IID hospitals. Only extreme synthetic label skew costs a
+  further ~0.010.
+- **FedProx does not help here**: mu 0.01 on test, and 0.1 and 1.0 checked on
+  validation, all match or trail FedAvg. With one local epoch per round, clients
+  do not drift far enough for the proximal term to pay off.
 
 ## Repository layout
 
@@ -130,8 +184,8 @@ fedecg-lab/
 ├── src/fedecg/       # The reusable package
 │   ├── data/         # PTB-XL loading, labels, preprocessing, partitioning
 │   ├── models/       # 1D ResNet
-│   ├── training/     # Training loop, metrics, MLflow
-│   ├── federated/    # Flower clients and strategies
+│   ├── training/     # Training loop, metrics, results table, MLflow
+│   ├── federated/    # Flower client, strategies, in-process simulation
 │   ├── privacy/      # Opacus / DP-SGD
 │   └── explain/      # Saliency over raw waveforms
 ├── tests/            # Fast unit tests (no dataset, no training)
@@ -158,6 +212,18 @@ forwards and backwards so ST segments do not shift relative to the QRS, and the
 per-lead standardizer is fitted on the training split only. It is serializable,
 so the federated phases can compare global against per-hospital statistics.
 
+**One budget, one selection rule.** Every federated config extends the
+centralized one, so model, data split, preprocessing and training recipe are
+identical. With every hospital training one local epoch per round, a round
+costs one pass over the training set, the same as a centralized epoch; both
+get at most 50. All models are selected at the epoch or round with the best
+validation AUROC, and validation and test stay on the server, unsplit.
+
+**Standardization under federation.** Per-lead mean and standard deviation can
+be computed exactly from each hospital's sums, sums of squares and counts, so
+the federated runs use the same pooled statistics as the baseline without any
+record leaving a hospital.
+
 **Tests without the dataset.** `tests/conftest.py` writes a miniature PTB-XL
 tree (same CSV columns, same WFDB record format) so the loading, labeling and
 splitting code is exercised in CI without the 1.8 GB download.
@@ -167,9 +233,11 @@ fast smoke runs, and CI never trains anything.
 
 ## Limitations
 
-- **Simulated federation.** Clients run in one process via Flower's simulation
-  backend. This reproduces the *statistical* consequences of decentralization,
-  not real network conditions, stragglers, or systems failures.
+- **Simulated federation.** Clients are Flower `NumPyClient`s and aggregation is
+  Flower's own FedAvg / FedProx, but the clients run one after another in a
+  single process instead of in Ray workers (see `fedecg.federated.simulation`).
+  This reproduces the *statistical* consequences of decentralization, not real
+  network conditions, stragglers, or systems failures.
 - **Single-country data.** PTB-XL was collected in Germany between 1989 and
   1996 by a single provider. Partitioning it into synthetic "hospitals" cannot
   reproduce genuine cross-institution distribution shift.
