@@ -1,7 +1,7 @@
 """PyTorch architectures for 12-lead ECG classification.
 
-Planned contents:
-    resnet1d: A small 1D residual network sized for CPU training.
+Contents:
+    resnet1d: A small 1D residual network sized for laptop training.
 
 Design constraint: normalization layers must be compatible with Opacus, which
 cannot privatize `BatchNorm` because its statistics mix information across

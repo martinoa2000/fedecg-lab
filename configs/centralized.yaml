@@ -1,0 +1,7 @@
+# Phase 3: the centralized baseline.
+#
+# Identical to the base config on purpose. Every later phase (federated, DP)
+# extends this file, so its numbers are the reference the others are measured
+# against.
+
+extends: default.yaml

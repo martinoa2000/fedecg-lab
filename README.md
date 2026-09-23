@@ -71,8 +71,18 @@ per-site/device breakdown, example signals) into `results/`:
 uv run python scripts/explore_data.py
 ```
 
+Train the centralized baseline. Check the pipeline first with a two-minute
+smoke run (1,000 training records, 2 epochs), then run the real thing:
+
+```bash
+uv run python scripts/train_centralized.py --config smoke.yaml
+uv run python scripts/train_centralized.py
+```
+
 The first training run caches all waveforms in `data/cache/` as a single
-`.npz`, so later runs skip WFDB parsing.
+`.npz`, so later runs skip WFDB parsing. Test metrics and the per-epoch history
+land in `results/tables/`, weights in `checkpoints/`, and every run is logged
+to MLflow (`uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`).
 
 Run the test suite:
 
@@ -89,9 +99,9 @@ uv run pre-commit install
 ## Roadmap
 
 - [x] **1. Setup** — project structure, pinned dependencies, pre-commit, CI, reproducible data download.
-- [ ] **2. Exploration and preprocessing** — label distribution, per-class ECG visualization, filtering and normalization.
-  *Code, tests and notebook `01_exploration` done (`fedecg.data.ptbxl`, `preprocess`, `stats`); committed tables pending a run on the full dataset.*
+- [x] **2. Exploration and preprocessing** — label distribution, per-class ECG visualization, filtering and normalization.
 - [ ] **3. Centralized baseline** — 1D ResNet, early stopping, MLflow tracking, comparison against published PTB-XL results.
+  *First run: test macro AUROC **0.909** (published `resnet1d_wang`: 0.930). Closing the gap (LR schedule, random-crop training) and the comparison notebook are pending.*
 - [ ] **4. Federated (IID)** — Flower simulation of N hospitals with random splits, FedAvg vs. centralized.
 - [ ] **5. Federated (non-IID)** — partitions by recording `site`/`device` and Dirichlet label skew; FedAvg vs. FedProx.
 - [ ] **6. Differential privacy** — DP-SGD with Opacus, local and federated; the performance/epsilon trade-off curve.
