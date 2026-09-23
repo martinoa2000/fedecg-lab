@@ -24,7 +24,7 @@ const ROADMAP = [
   "Explainability",
   "Write-up",
 ];
-const PHASES_DONE = 2;
+const PHASES_DONE = 5;
 
 function useRoute() {
   const read = () => window.location.hash.replace(/^#\/?/, "");
