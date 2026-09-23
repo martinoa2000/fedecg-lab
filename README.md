@@ -80,6 +80,17 @@ Run the test suite:
 uv run pytest
 ```
 
+Explore the data in the dashboard (needs [Node.js](https://nodejs.org/) 22+):
+
+```bash
+uv run python scripts/export_dashboard.py
+npm --prefix app install
+npm --prefix app run dev
+```
+
+Then open http://localhost:5173. The export writes to `app/public/data/`, which is
+git-ignored because it contains PTB-XL waveforms.
+
 Enable the git hooks (lint, formatting, notebook output stripping):
 
 ```bash
@@ -102,6 +113,7 @@ uv run pre-commit install
 
 ```
 fedecg-lab/
+├── app/              # Dashboard (Vite + React): data, signals, results
 ├── configs/          # Experiment configs (YAML, with `extends` inheritance)
 ├── notebooks/        # 01..07, numbered; concepts explained before code
 ├── scripts/          # Data download and experiment entry points
