@@ -1352,7 +1352,7 @@ table.mix {
   top: 50%;
   height: 2px;
   margin-top: -1px;
-  background: var(--seq-2);
+  background: var(--axis);
   border-radius: 1px;
 }
 
@@ -1573,4 +1573,74 @@ table.runs {
 .curve {
   width: 100%;
   overflow: hidden;
+}
+
+/* ------------------------------------------------ results: privacy, saliency */
+
+.curve .ref {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.curve .series-label {
+  fill: var(--ink-2);
+  font-size: 12px;
+}
+
+.eps-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.eps-dots .dot-hit {
+  pointer-events: auto;
+}
+
+.strip {
+  min-width: 0;
+}
+
+.strip svg {
+  display: block;
+}
+
+.strip .trace {
+  fill: none;
+  stroke: var(--trace);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.strip .st-span {
+  fill: var(--grid-minor);
+}
+
+.strip .attr-bar {
+  fill: var(--seq-4);
+}
+
+.strip .grid {
+  stroke: var(--hairline);
+}
+
+.strip .axis-text {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.strip-legend .st-key,
+.strip-legend .attr-key {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.strip-legend .st-key {
+  background: var(--grid-minor);
+}
+
+.strip-legend .attr-key {
+  background: var(--seq-4);
 }

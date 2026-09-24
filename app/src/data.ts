@@ -114,11 +114,57 @@ export interface Experiments {
   published: PublishedResult[];
 }
 
+export type Segment = "qrs" | "st" | "t" | "other";
+
+export interface SegmentRow {
+  superclass: Superclass;
+  method: "integrated_gradients" | "integrated_gradients_random" | "grad_cam" | "grad_cam_random";
+  segment: Segment;
+  n_records: number;
+  attribution_share: number;
+  time_share: number;
+  enrichment: number | null;
+}
+
+export type LeadShareRow = { superclass: Superclass } & Record<string, number>;
+
+export interface SanityRow {
+  superclass: Superclass;
+  n_records: number;
+  integrated_gradients: number | null;
+  grad_cam: number | null;
+  /** Share of records whose random-weight Grad-CAM is not all zero. */
+  grad_cam_random_nonzero?: number;
+}
+
+export interface SaliencyExample {
+  superclass: Superclass;
+  probability: number;
+  /** Microvolts, `[lead][sample]`. */
+  signal: number[][];
+  /** |Integrated Gradients|, 0-100 scaled by the record's maximum, `[lead][sample]`. */
+  attribution: number[][];
+  /** `[start, end)` sample ranges per beat segment, from lead II. */
+  segments: Record<"qrs" | "st" | "t", [number, number][]>;
+}
+
+export interface Explain {
+  segments: SegmentRow[];
+  leads: LeadShareRow[];
+  sanity: SanityRow[];
+  examples: SaliencyExample[];
+  fs?: number;
+  lead_names?: string[];
+}
+
 export interface AppData {
   dataset: Dataset;
   signals: Signals;
   experiments: Experiments;
+  explain: Explain;
 }
+
+const EMPTY_EXPLAIN: Explain = { segments: [], leads: [], sanity: [], examples: [] };
 
 export type LoadState =
   | { status: "loading" }
@@ -138,8 +184,10 @@ export function useAppData(): LoadState {
       getJson<Dataset>("dataset.json"),
       getJson<Signals>("signals.json"),
       getJson<Partial<Experiments>>("experiments.json"),
+      // Optional: only present once scripts/explain_model.py has run.
+      getJson<Explain>("explain.json").catch(() => EMPTY_EXPLAIN),
     ])
-      .then(([dataset, signals, experiments]) =>
+      .then(([dataset, signals, experiments, explain]) =>
         setState({
           status: "ready",
           data: {
@@ -152,6 +200,7 @@ export function useAppData(): LoadState {
               clients: experiments.clients ?? {},
               published: experiments.published ?? [],
             },
+            explain,
           },
         }),
       )

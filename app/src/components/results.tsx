@@ -66,11 +66,20 @@ export function DotPlot({
   references,
   domain,
   ariaLabel,
+  tickStep = 0.01,
+  format = fmtAuroc,
+  metric = "macro AUROC",
 }: {
   rows: DotRow[];
   references: Reference[];
   domain: [number, number];
   ariaLabel: string;
+  /** Spacing of axis ticks, in data units. */
+  tickStep?: number;
+  /** Formats a value for screen readers. */
+  format?: (v: number) => string;
+  /** What the values are, for screen readers. */
+  metric?: string;
 }) {
   const tip = useTip();
   const [lo, hi] = domain;
@@ -112,7 +121,7 @@ export function DotPlot({
                   className="dot-hit"
                   data-hollow={p.hollow || undefined}
                   style={{ left: pct(p.value), "--c": p.color } as React.CSSProperties}
-                  aria-label={`${p.label}: macro AUROC ${fmtAuroc(p.value)}`}
+                  aria-label={`${p.label}: ${metric} ${format(p.value)}`}
                   {...tip(p.tip)}
                 >
                   <i className="dot" />
@@ -127,9 +136,9 @@ export function DotPlot({
       <div className="dot-row dot-axis" aria-hidden>
         <span />
         <span className="dot-track">
-          {ticksOf(domain).map((t) => (
+          {ticksOf(domain, tickStep).map((t) => (
             <span key={t} className="tick" style={{ left: pct(t) }}>
-              {t.toFixed(2)}
+              {tickStep >= 0.5 ? t.toFixed(1) : t.toFixed(2)}
             </span>
           ))}
         </span>
@@ -150,7 +159,7 @@ export interface Series {
   best?: number;
 }
 
-function useWidth<T extends HTMLElement>() {
+export function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(640);
   useLayoutEffect(() => {
@@ -290,6 +299,124 @@ export function CurveChart({
           ))}
         </figcaption>
       )}
+    </figure>
+  );
+}
+
+/* ---------------------------------------------------------- epsilon chart */
+
+export interface EpsilonPoint {
+  /** Privacy budget; null is the same recipe trained without privacy. */
+  epsilon: number | null;
+  value: number;
+  tip: ReactNode;
+}
+
+export interface EpsilonSeries {
+  key: string;
+  label: string;
+  color: string;
+  points: EpsilonPoint[];
+}
+
+/**
+ * Test AUROC against the privacy budget. Epsilon values sit at even steps
+ * (1, 3, 8, no privacy): they are the settings that were run, not a
+ * continuous scale, and spacing them evenly keeps the strictest budgets
+ * readable.
+ */
+export function EpsilonChart({
+  series,
+  references,
+  ariaLabel,
+  height = 260,
+}: {
+  series: EpsilonSeries[];
+  references: Reference[];
+  ariaLabel: string;
+  height?: number;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const tip = useTip();
+  const budgets = [...new Set(series.flatMap((s) => s.points.map((p) => p.epsilon)))].sort(
+    (a, b) => (a ?? Infinity) - (b ?? Infinity),
+  );
+  const values = [...series.flatMap((s) => s.points.map((p) => p.value)), ...references.map((r) => r.value)];
+  const [lo, hi] = aurocDomain(values, 0.02);
+  const labelRoom = Math.min(150, width * 0.3);
+  const pad = { top: 16, right: labelRoom, bottom: 44, left: 44 };
+  const plotW = Math.max(width - pad.left - pad.right, 10);
+  const plotH = height - pad.top - pad.bottom;
+  const x = (eps: number | null) =>
+    pad.left + (budgets.length > 1 ? (budgets.indexOf(eps) / (budgets.length - 1)) * plotW : plotW / 2);
+  const y = (v: number) => pad.top + (1 - (v - lo) / (hi - lo)) * plotH;
+  const fmtEps = (eps: number | null) => (eps === null ? "No privacy" : `ε = ${eps}`);
+
+  return (
+    <figure className="curve" ref={ref} style={{ margin: 0 }} aria-label={ariaLabel}>
+      <svg width={width} height={height} role="img" aria-label={ariaLabel}>
+        {ticksOf([lo, hi], 0.02).map((t) => (
+          <g key={t}>
+            <line className="grid" x1={pad.left} x2={pad.left + plotW} y1={y(t)} y2={y(t)} />
+            <text className="axis-text" x={pad.left - 8} y={y(t)} dy="0.32em" textAnchor="end">
+              {t.toFixed(2)}
+            </text>
+          </g>
+        ))}
+        {references.map((r) => (
+          <g key={r.key}>
+            <line className="ref" x1={pad.left} x2={pad.left + plotW} y1={y(r.value)} y2={y(r.value)} />
+            <text className="axis-text" x={pad.left + plotW + 8} y={y(r.value)} dy="0.32em">
+              {r.label}
+            </text>
+          </g>
+        ))}
+        {budgets.map((eps) => (
+          <text key={String(eps)} className="axis-text" x={x(eps)} y={pad.top + plotH + 18} textAnchor="middle">
+            {eps === null ? "none" : eps}
+          </text>
+        ))}
+        <text className="axis-text" x={pad.left + plotW / 2} y={height - 4} textAnchor="middle">
+          Privacy budget ε (smaller is more private)
+        </text>
+        {series.map((s) => {
+          const pts = [...s.points].sort((a, b) => budgets.indexOf(a.epsilon) - budgets.indexOf(b.epsilon));
+          const last = pts[pts.length - 1];
+          return (
+            <g key={s.key}>
+              <path
+                d={pts.map((p, i) => `${i ? "L" : "M"}${x(p.epsilon).toFixed(1)},${y(p.value).toFixed(1)}`).join("")}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={2}
+                strokeLinejoin="round"
+              />
+              {last && (
+                <text className="series-label" x={x(last.epsilon) + 10} y={y(last.value)} dy="0.32em">
+                  {s.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {/* Dots are HTML so they get the shared tooltip and keyboard focus. */}
+      <div className="eps-dots">
+        {series.flatMap((s) =>
+          s.points.map((p) => (
+            <span
+              key={`${s.key}-${p.epsilon}`}
+              className="dot-hit"
+              role="img"
+              style={{ left: x(p.epsilon), top: y(p.value), "--c": s.color } as React.CSSProperties}
+              aria-label={`${s.label}, ${fmtEps(p.epsilon)}: macro AUROC ${fmtAuroc(p.value)}`}
+              {...tip(p.tip)}
+            >
+              <i className="dot" />
+            </span>
+          )),
+        )}
+      </div>
     </figure>
   );
 }
