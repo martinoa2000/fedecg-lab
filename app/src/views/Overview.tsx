@@ -8,21 +8,25 @@ const QUESTIONS = [
     title: "What does decentralisation cost?",
     body: "AUROC lost when one training set becomes N hospitals running FedAvg.",
     phase: "Phases 3 and 4",
+    href: "#/federated",
   },
   {
     title: "What does heterogeneity cost?",
     body: "Hospitals differ in devices and patient mix. How far does that pull performance down, and does FedProx recover it?",
     phase: "Phase 5",
+    href: "#/federated",
   },
   {
     title: "What does privacy cost?",
     body: "DP-SGD gives a formal guarantee. At what epsilon does the model stop being useful?",
     phase: "Phase 6",
+    href: "#/privacy",
   },
   {
     title: "Can the model be trusted?",
     body: "When it flags an infarction, is it looking at the ST segment or at noise?",
     phase: "Phase 7",
+    href: "#/explainability",
   },
 ];
 
@@ -120,7 +124,9 @@ export function Overview({ data }: { data: AppData }) {
             <li key={q.title}>
               <h3>{q.title}</h3>
               <p>{q.body}</p>
-              <span className="phase">{q.phase}</span>
+              <a className="phase" href={q.href}>
+                {q.phase}: see the results
+              </a>
             </li>
           ))}
         </ol>

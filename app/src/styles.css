@@ -709,7 +709,15 @@ section {
 
 .questions .phase {
   font-size: 0.8125rem;
-  color: var(--muted);
+  color: var(--ink-2);
+  justify-self: start;
+  text-underline-offset: 3px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .questions .phase:hover {
+    color: var(--ink);
+  }
 }
 
 @media (max-width: 760px) {
@@ -1144,40 +1152,6 @@ table.mix {
 
 /* ----------------------------------------------------------- experiments */
 
-.phases {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-}
-
-.phases > li {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 4px 20px;
-  padding: 24px 0;
-  border-top: 1px solid var(--hairline);
-}
-
-.phases > li > .num {
-  font-family: var(--font-cond);
-  font-size: 2rem;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--muted);
-  grid-row: span 4;
-}
-
-.phases .body {
-  display: grid;
-  gap: 8px;
-  max-width: 72ch;
-}
-
-.phases .body p {
-  color: var(--ink-2);
-}
-
 .status {
   display: inline-flex;
   align-items: center;
@@ -1252,15 +1226,6 @@ table.mix {
 }
 
 /* ------------------------------------------------------ results: dot plot */
-
-.phases .body.wide {
-  max-width: none;
-  gap: 16px;
-}
-
-.phases .body.wide > p {
-  max-width: 72ch;
-}
 
 .chart-title {
   font-family: var(--font-cond);
@@ -1535,15 +1500,6 @@ table.runs {
 }
 
 @media (max-width: 720px) {
-  .phases > li {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .phases > li > .num {
-    grid-row: auto;
-    font-size: 1.5rem;
-  }
-
   .dot-row .name {
     max-width: 9rem;
   }
@@ -1564,8 +1520,8 @@ table.runs {
 
 /* Let chart columns shrink to the viewport: the curve chart measures its
    container, so the container must not size itself to the chart. */
-.phases .body,
-.phases .body > *,
+.page > *,
+section > *,
 .grid-2 > * {
   min-width: 0;
 }
@@ -1643,4 +1599,140 @@ table.runs {
 
 .strip-legend .attr-key {
   background: var(--seq-4);
+}
+
+
+/* ----------------------------------------------------- nav groups, paging */
+
+.nav {
+  gap: 20px;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-heading {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: 0 0 4px 12px;
+}
+
+.page-head .status {
+  justify-self: start;
+}
+
+/* Results: the four steps, each a link to its page. */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.steps a {
+  display: grid;
+  gap: 4px;
+  height: 100%;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    transform 160ms var(--ease-out);
+}
+
+.steps .step-title {
+  font-family: var(--font-cond);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.steps strong {
+  font-family: var(--font-cond);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.steps .step-caption {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.steps a:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .steps a:hover {
+    border-color: var(--axis);
+  }
+}
+
+.next-page a {
+  display: grid;
+  gap: 2px;
+  max-width: 44rem;
+  padding: 18px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  text-decoration: none;
+  transition: border-color 160ms ease;
+}
+
+.next-page .next-label {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.next-page strong {
+  font-family: var(--font-cond);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.next-page span:last-child {
+  color: var(--ink-2);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .next-page a:hover {
+    border-color: var(--axis);
+  }
+}
+
+@media (max-width: 960px) {
+  .nav {
+    gap: 0;
+  }
+
+  .nav-group {
+    flex-direction: row;
+  }
+
+  /* The top bar is one scrolling row; group names would only crowd it. */
+  .nav-heading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.dot-refs[data-stacked] {
+  min-height: 40px;
 }
