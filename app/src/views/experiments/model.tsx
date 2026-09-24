@@ -47,7 +47,10 @@ export function deriveResults(data: AppData): Results {
 
   const phase3 = rows
     .filter((r) => r.phase === 3)
-    .sort((a, b) => (a.run === "centralized" ? -1 : b.run === "centralized" ? 1 : 0));
+    // The baseline first, then the other recipes from best to worst.
+    .sort((a, b) =>
+      a.run === "centralized" ? -1 : b.run === "centralized" ? 1 : b.macro_auroc - a.macro_auroc,
+    );
   const phase4 = rows
     .filter((r) => r.phase === 4 && r.partition === "iid")
     .sort((a, b) => (a.n_clients ?? 0) - (b.n_clients ?? 0));
