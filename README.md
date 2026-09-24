@@ -16,6 +16,27 @@ each step.
 > **Not a medical device.** Research and educational code only. See
 > [Limitations](#limitations).
 
+## Findings
+
+Test macro AUROC on PTB-XL's official test fold; the centralized baseline
+scores **0.916** (published `resnet1d_wang`: 0.930).
+
+1. **Decentralization costs 0.007 to 0.024 AUROC**, growing with the number of
+   hospitals (5, 10, 20), at equal compute. Most of it is slower progress per
+   pass over the data, not a lower ceiling.
+2. **Realistic heterogeneity adds almost nothing.** Hospitals built from real
+   recording sites and ECG devices, with very different label mixes, score like
+   the same number of random hospitals. Only extreme synthetic label skew
+   costs a further ~0.010, and FedProx recovers none of it.
+3. **Privacy is the expensive step.** DP-SGD at ε = 8 / 3 / 1 costs 0.024 /
+   0.035 / 0.066 against the same recipe without privacy, and more when each of
+   five hospitals applies it to its own, smaller dataset: 0.027 / 0.046 / 0.112.
+4. **The model recognizes infarction from the QRS complex, not the ST
+   segment**, consistent with PTB-XL's mostly old infarcts and their Q waves.
+   On the way there: zero-baseline Integrated Gradients is invalid for this
+   (scale-invariant) network, and even corrected IG maps mostly show the
+   input's shape; Grad-CAM largely passes the model-randomization test.
+
 ## The question
 
 A hospital cannot usually ship patient ECGs to a central server. Federated
@@ -47,6 +68,32 @@ the 100 Hz version so everything runs on a laptop.
 
 The data is **never committed**. `scripts/download_data.py` fetches it from
 PhysioNet and verifies every file against the official `SHA256SUMS.txt`.
+
+## How it works
+
+```mermaid
+flowchart LR
+    ptbxl[(PTB-XL<br/>21,799 ECGs)] --> prep["Folds 1-8 / 9 / 10<br/>0.5-40 Hz band-pass<br/>per-lead standardization"]
+    prep --> central["Centralized<br/>1D ResNet"]
+    prep --> split["Partition into hospitals<br/>random · site · device · Dirichlet"]
+    split --> h1["Hospital 1<br/>local epoch"] & h2["Hospital 2<br/>local epoch"] & hn["Hospital N<br/>local epoch"]
+    h1 & h2 & hn -->|weights| agg["Flower FedAvg / FedProx<br/>weighted average"]
+    agg -->|global model| h1 & h2 & hn
+    dp{{"DP-SGD (Opacus)<br/>clip + noise per record"}} -.-> central
+    dp -.-> h1 & h2 & hn
+    central & agg --> select["Best epoch or round<br/>on validation fold 9"]
+    select --> test["Test fold 10, once<br/>thresholds from fold 9"]
+    test --> table[("experiments.csv")]
+    select --> explain["IG / Grad-CAM<br/>+ beat delineation"]
+    table & explain --> out["Notebooks 02-06<br/>Dashboard"]
+```
+
+Every experiment is one YAML file in `configs/`. Configs inherit through
+`extends`, so the diff between two files is exactly what that experiment
+changes: the federated configs extend the centralized one, the private ones
+extend both. Every model is selected on the same validation fold and scored
+once on the same test fold, and every run appends one row to
+`results/tables/experiments.csv`.
 
 ## Quickstart
 
@@ -107,6 +154,26 @@ done
 
 On an Apple M-series laptop each run takes 2 to 4 minutes.
 
+Differential privacy (phase 6) and explanations (phase 7):
+
+```bash
+for c in dp_none dp_eps8 dp_eps3 dp_eps1; do
+  uv run python scripts/train_centralized.py --config $c.yaml
+done
+for c in fed_dp_none fed_dp_eps8 fed_dp_eps3 fed_dp_eps1; do
+  uv run python scripts/train_federated.py --config $c.yaml
+done
+uv run python scripts/explain_model.py   # explains checkpoints/centralized.pt
+```
+
+Or reproduce every number in this README in one go (about two and a half
+hours, mostly DP-SGD); pass phase numbers to run only some of them:
+
+```bash
+scripts/reproduce.sh          # phases 2-7, then the dashboard export
+scripts/reproduce.sh 6 7      # only privacy and explanations
+```
+
 Run the test suite:
 
 ```bash
@@ -137,41 +204,54 @@ uv run pre-commit install
 - [x] **3. Centralized baseline** — 1D ResNet, random-crop training, cosine schedule, early stopping, MLflow tracking, comparison against published PTB-XL results ([notebook 02](notebooks/02_centralized_baseline.ipynb)).
 - [x] **4. Federated (IID)** — Flower FedAvg across 5, 10 and 20 simulated hospitals with random splits ([notebook 03](notebooks/03_federated_iid.ipynb)).
 - [x] **5. Federated (non-IID)** — hospitals by recording site, by device and by Dirichlet label skew; FedAvg vs. FedProx ([notebook 04](notebooks/04_federated_non_iid.ipynb)).
-- [ ] **6. Differential privacy** — DP-SGD with Opacus, local and federated; the performance/epsilon trade-off curve.
-- [ ] **7. Explainability** — Integrated Gradients / Grad-CAM 1D saliency overlaid on the raw signal.
-- [ ] **8. Write-up** — architecture diagram, comparative results table, reproduction instructions.
+- [x] **6. Differential privacy** — DP-SGD with Opacus, centralized and inside each federated hospital, at ε = 1, 3, 8 against no-privacy controls ([notebook 05](notebooks/05_differential_privacy.ipynb)).
+- [x] **7. Explainability** — Integrated Gradients and Grad-CAM, beat-segment enrichment and the model-randomization check ([notebook 06](notebooks/06_explainability.ipynb)).
+- [x] **8. Write-up** — findings, architecture diagram, comparative results table, one-command reproduction (`scripts/reproduce.sh`).
 
-## Results so far
+## Results
 
 Test macro AUROC on the official test fold (fold 10), one run per setting with
 seed 42. Retraining the baseline with three seeds spans 0.915 to 0.917, so gaps
 smaller than about 0.003 are noise. Full table: `results/tables/experiments.csv`.
 
-| Setting | Hospitals | Macro AUROC | vs. centralized |
-|---|---:|---:|---:|
-| Published `resnet1d_wang` (Strodthoff et al., 2021) | 1 | 0.930 | |
-| **Centralized** (random crops, cosine LR) | 1 | **0.916** | |
-| Centralized, full-length records, constant LR | 1 | 0.909 | −0.007 |
-| FedAvg, IID | 5 | 0.908 | −0.007 |
-| FedAvg, IID | 10 | 0.899 | −0.016 |
-| FedAvg, IID | 20 | 0.892 | −0.024 |
-| FedAvg, by recording site | 4 | 0.911 | −0.004 |
-| FedAvg, by device | 8 | 0.908 | −0.007 |
-| FedAvg, Dirichlet label skew (alpha 0.3) | 10 | 0.889 | −0.026 |
-| FedProx (mu 0.01), by site / device / label skew | 4 / 8 / 10 | 0.908 / 0.906 / 0.888 | −0.008 / −0.009 / −0.028 |
+| Phase | Setting | Hospitals | Macro AUROC | vs. centralized |
+|---|---|---:|---:|---:|
+| | Published `resnet1d_wang` (Strodthoff et al., 2021) | 1 | 0.930 | |
+| 3 | **Centralized** (random crops, cosine LR) | 1 | **0.916** | |
+| 3 | Centralized, full-length records, constant LR | 1 | 0.909 | −0.007 |
+| 4 | FedAvg, IID | 5 | 0.908 | −0.007 |
+| 4 | FedAvg, IID | 10 | 0.899 | −0.016 |
+| 4 | FedAvg, IID | 20 | 0.892 | −0.024 |
+| 5 | FedAvg, by recording site | 4 | 0.911 | −0.004 |
+| 5 | FedAvg, by device | 8 | 0.908 | −0.007 |
+| 5 | FedAvg, Dirichlet label skew (alpha 0.3) | 10 | 0.889 | −0.026 |
+| 5 | FedProx (mu 0.01), by site / device / label skew | 4 / 8 / 10 | 0.908 / 0.906 / 0.888 | −0.008 / −0.009 / −0.028 |
+| 6 | Centralized, DP recipe without privacy | 1 | 0.898 | −0.018 |
+| 6 | Centralized, DP-SGD, ε = 8 / 3 / 1 | 1 | 0.874 / 0.863 / 0.832 | −0.042 / −0.053 / −0.084 |
+| 6 | FedAvg IID, DP recipe without privacy | 5 | 0.867 | −0.049 |
+| 6 | FedAvg IID, DP-SGD per hospital, ε = 8 / 3 / 1 | 5 | 0.840 / 0.821 / 0.755 | −0.076 / −0.095 / −0.160 |
 
-What the numbers say:
+The DP rows use their own recipe (batches of 1,024 centrally, 30 epochs or
+rounds), which costs AUROC even without noise; the privacy cost proper is each
+row's gap to its no-privacy control. δ = 10⁻⁵ throughout.
 
-- **Decentralization costs AUROC, and more so the more hospitals there are.**
-  At equal compute (one pass over the data per round or epoch), FedAvg is
-  still improving at round 50 when the centralized model has long peaked.
-- **Realistic heterogeneity adds little on top.** Hospitals built from real
-  sites and devices, whose label mix differs widely, score about as well as
-  the same number of IID hospitals. Only extreme synthetic label skew costs a
-  further ~0.010.
-- **FedProx does not help here**: mu 0.01 on test, and 0.1 and 1.0 checked on
-  validation, all match or trail FedAvg. With one local epoch per round, clients
-  do not drift far enough for the proximal term to pay off.
+Where the baseline looks (Grad-CAM enrichment: share of attention in a beat
+segment divided by the share of time it covers; 1 is chance), over 100
+correctly detected test ECGs per class, with the same network at random
+weights for comparison:
+
+| Class | QRS complex | ST segment | T wave | Reading |
+|---|---:|---:|---:|---|
+| MI | **2.91** | 0.49 | 0.37 | Q waves of old infarcts, not ST elevation |
+| HYP | 2.32 (random 2.03) | **1.55** (random 0.06) | 0.76 | QRS emphasis is the input's; ST "strain" attention is learned |
+| CD | **1.58** (random 0.76) | **1.96** (random 0.32) | 0.57 | learned QRS attention; part of the "ST" may be the widened QRS tail |
+| STTC | 1.04 | 1.85 (random 1.94) | 1.31 (random 1.27) | the expected segments, but so does the random network |
+
+What the numbers say, phase by phase, is in the notebooks: decentralization
+([03](notebooks/03_federated_iid.ipynb)), heterogeneity
+([04](notebooks/04_federated_non_iid.ipynb)), privacy
+([05](notebooks/05_differential_privacy.ipynb)) and trust
+([06](notebooks/06_explainability.ipynb)).
 
 ## Repository layout
 
@@ -179,15 +259,15 @@ What the numbers say:
 fedecg-lab/
 ├── app/              # Dashboard (Vite + React): data, signals, results
 ├── configs/          # Experiment configs (YAML, with `extends` inheritance)
-├── notebooks/        # 01..07, numbered; concepts explained before code
-├── scripts/          # Data download and experiment entry points
+├── notebooks/        # 01..06, numbered; concepts explained before code
+├── scripts/          # Data download, experiment entry points, reproduce.sh
 ├── src/fedecg/       # The reusable package
 │   ├── data/         # PTB-XL loading, labels, preprocessing, partitioning
 │   ├── models/       # 1D ResNet
 │   ├── training/     # Training loop, metrics, results table, MLflow
 │   ├── federated/    # Flower client, strategies, in-process simulation
-│   ├── privacy/      # Opacus / DP-SGD
-│   └── explain/      # Saliency over raw waveforms
+│   ├── privacy/      # DP-SGD with Opacus, calibrated to a target epsilon
+│   └── explain/      # Saliency, beat delineation, randomization check
 ├── tests/            # Fast unit tests (no dataset, no training)
 └── results/          # Committed tables and figures
 ```
@@ -224,6 +304,21 @@ be computed exactly from each hospital's sums, sums of squares and counts, so
 the federated runs use the same pooled statistics as the baseline without any
 record leaving a hospital.
 
+**Privacy is measured against a matched control.** DP-SGD needs its own
+recipe (large batches, a higher learning rate, 30 epochs), which also changes
+the non-private model. Each DP setting therefore has a twin config with privacy
+switched off, and the cost of privacy is the gap to that twin. The noise is
+calibrated before training so the whole planned run spends exactly the target
+ε; picking the best epoch on the validation fold is post-processing and costs
+no privacy.
+
+**Saliency is checked against a random network.** Integrated Gradients starts
+from a blurred copy of each record, not zeros: the ResNet's bias-free first
+convolution followed by GroupNorm makes it scale-invariant, so the usual
+zero baseline carries no information. Every map is also computed for the same
+architecture with random weights (Adebayo et al., 2018), and only differences
+from that are read as the model's reasoning.
+
 **Tests without the dataset.** `tests/conftest.py` writes a miniature PTB-XL
 tree (same CSV columns, same WFDB record format) so the loading, labeling and
 splitting code is exercised in CI without the 1.8 GB download.
@@ -244,6 +339,15 @@ fast smoke runs, and CI never trains anything.
 - **Record-level, not hospital-level privacy.** DP-SGD inside each client
   protects individual records within that client. It does not hide a hospital's
   participation, which needs noise at aggregation time instead.
+- **One seed per setting.** Three seeds of the baseline span 0.002 AUROC;
+  differences smaller than about 0.003 between single runs are not meaningful.
+- **DP hyperparameters were tuned without privacy accounting.** The DP recipe
+  was chosen on the validation fold, as is common in DP papers; a deployment
+  would tune on public data or pay for the search in ε.
+- **Saliency is correlational.** Enrichment shows where attribution falls, not
+  that the model uses that segment causally, and the delineator's segment
+  boundaries (from lead II only) are themselves imperfect, especially for wide
+  QRS complexes.
 - **Not clinically validated.** Superclass labels are a coarse simplification of
   the full diagnostic hierarchy. Nothing here is fit for clinical use.
 
@@ -254,6 +358,11 @@ fast smoke runs, and CI never trains anything.
 - McMahan et al. (2017). *Communication-Efficient Learning of Deep Networks from Decentralized Data.* AISTATS.
 - Li et al. (2020). *Federated Optimization in Heterogeneous Networks (FedProx).* MLSys.
 - Abadi et al. (2016). *Deep Learning with Differential Privacy.* CCS.
+- Hsu et al. (2019). *Measuring the Effects of Non-Identical Data Distribution for Federated Visual Classification.* arXiv:1909.06335.
+- Sundararajan et al. (2017). *Axiomatic Attribution for Deep Networks.* ICML.
+- Selvaraju et al. (2017). *Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization.* ICCV.
+- Adebayo et al. (2018). *Sanity Checks for Saliency Maps.* NeurIPS.
+- Sturmfels et al. (2020). *Visualizing the Impact of Feature Attribution Baselines.* Distill.
 
 ## License
 

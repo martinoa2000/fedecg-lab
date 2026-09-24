@@ -1,0 +1,8 @@
+# Phase 6 control: the federated DP recipe without clipping or noise.
+
+extends: fed_dp.yaml
+
+experiment: {phase: 6, setting: "FedAvg, 5 hospitals, DP recipe, no privacy"}
+
+privacy:
+  enabled: false

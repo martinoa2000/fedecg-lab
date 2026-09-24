@@ -1,0 +1,8 @@
+# Phase 6: FedAvg across 5 IID hospitals, each with DP-SGD at epsilon 3.
+
+extends: fed_dp.yaml
+
+experiment: {phase: 6, setting: "FedAvg, 5 hospitals, DP, epsilon 3"}
+
+privacy:
+  target_epsilon: 3.0

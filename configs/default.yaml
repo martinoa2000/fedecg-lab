@@ -53,3 +53,14 @@ training:
 tracking:
   enabled: true
   experiment_name: fedecg
+
+privacy:
+  # DP-SGD (phase 6). Off everywhere except the configs that turn it on.
+  enabled: false
+  target_epsilon: 8.0
+  # Below 1 / n for every data owner (the smallest DP hospital has ~3,400 records).
+  delta: 1.0e-5
+  # Per-record gradient L2 norm bound before noise is added.
+  max_grad_norm: 1.0
+  # Opacus accountant: prv (tightest bound) or rdp.
+  accountant: prv

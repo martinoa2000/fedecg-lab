@@ -9,6 +9,9 @@ Pipeline:
 4. Train the 1D ResNet with early stopping on validation macro AUROC.
 5. Tune one F1 threshold per class on validation, then evaluate test once.
 
+With `privacy.enabled`, step 4 runs DP-SGD (roadmap phase 6) and the epsilon
+spent is reported and recorded.
+
 Writes, named after the config (`centralized` by default):
 
     results/tables/<name>_test_metrics.csv   per-class AUROC / F1 / threshold on test
@@ -39,6 +42,7 @@ from fedecg.config import load_config
 from fedecg.data.pipeline import prepare_data
 from fedecg.models.resnet1d import build_model, count_parameters
 from fedecg.paths import CACHE_DIR, CHECKPOINT_DIR, PTBXL_DIR, TABLES_DIR, ensure_dir
+from fedecg.privacy.dp_sgd import private_training_from_config
 from fedecg.seed import set_seed
 from fedecg.training.evaluate import final_evaluation
 from fedecg.training.loop import fit, make_loader, resolve_device
@@ -98,6 +102,17 @@ def main(argv: list[str] | None = None) -> int:
     model = build_model(config["model"]).to(device)
     print(f"resnet1d with {count_parameters(model):,} parameters on {device}")
 
+    # DP-SGD (phase 6) when the config enables it; the budget covers every
+    # planned epoch, whether or not early stopping ends training sooner.
+    private = private_training_from_config(
+        config, n_records=len(data.x_train), epochs=int(train_cfg["epochs"])
+    )
+    if private is not None:
+        print(
+            f"DP-SGD: target epsilon {private.target_epsilon} at delta {private.delta}, "
+            f"noise multiplier {private.noise_multiplier:.3f}, clip {private.max_grad_norm}"
+        )
+
     with start_run(config.get("tracking", {}), run_name=name) as tracker:
         tracker.log_params(config)
         tracker.log_params({"n_train": len(data.x_train), "n_parameters": count_parameters(model)})
@@ -112,8 +127,14 @@ def main(argv: list[str] | None = None) -> int:
                 {k: v for k, v in row.items() if k != "epoch"}, step=int(row["epoch"])
             ),
             progress=True,
+            wrap=private.wrap if private is not None else None,
         )
         print(f"best epoch {result.best_epoch}: val macro AUROC {result.best_score:.4f}")
+        epsilon = None
+        if private is not None:
+            private.unwrap()
+            epsilon = private.epsilon()
+            print(f"epsilon spent: {epsilon:.3f} at delta {private.delta}")
 
         table, thresholds = final_evaluation(model, val_loader, test_loader, device, train_cfg)
         print(table.round(4).to_string())
@@ -141,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
                 "best_epoch": result.best_epoch,
                 "test_macro_auroc": table.loc["macro", "auroc"],
                 "test_macro_f1": table.loc["macro", "f1"],
+                **({"epsilon": epsilon} if epsilon is not None else {}),
             }
         )
         for path in (metrics_path, history_path):
@@ -157,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
             best_step=result.best_epoch,
             steps_run=len(result.history),
             communication_mb=0.0,
+            epsilon=None if epsilon is None else round(epsilon, 3),
             seconds=round(time.perf_counter() - started, 1),
         ),
         args.experiments or tables / "experiments.csv",

@@ -12,6 +12,7 @@ import {
 } from "../components/results";
 import { ClassName } from "../components/charts";
 import { formatInt, type AppData, type ExperimentRow, type Superclass } from "../data";
+import { ExplainResults, PrivacyResults } from "./PrivacyAndTrust";
 
 const CLASSES: Superclass[] = ["NORM", "MI", "STTC", "CD", "HYP"];
 
@@ -36,21 +37,6 @@ const PARTITIONS: { key: string; label: string; blurb: string }[] = [
 /** Ordinal blue ramp for "more hospitals": a lighter step is fewer. Starts at
  * step 3, the lightest that keeps 3:1 against the surface. */
 const HOSPITAL_STEPS = ["var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
-
-const PENDING = [
-  {
-    phase: 6,
-    title: "Differential privacy",
-    body: "DP-SGD with Opacus, both centrally and inside each federated client.",
-    shows: "AUROC against epsilon: where the privacy guarantee starts to make the model useless.",
-  },
-  {
-    phase: 7,
-    title: "Explainability",
-    body: "Integrated Gradients and Grad-CAM saliency laid over the raw signal.",
-    shows: "Whether infarction predictions rest on the ST segment or on noise.",
-  },
-];
 
 function Tip({ row, baseline }: { row: ExperimentRow; baseline?: ExperimentRow }) {
   return (
@@ -78,11 +64,14 @@ function Phase({
   num,
   title,
   count,
+  status,
   children,
 }: {
   num: number;
   title: string;
   count: number;
+  /** Replaces the run count, for phases that are not measured in runs. */
+  status?: string;
   children: ReactNode;
 }) {
   return (
@@ -95,7 +84,7 @@ function Phase({
           {title}
         </h2>
         <span className="status" data-state={count ? "has-results" : "pending"}>
-          {count ? `${count} ${count === 1 ? "run" : "runs"}` : "Not run yet"}
+          {count ? (status ?? `${count} ${count === 1 ? "run" : "runs"}`) : "Not run yet"}
         </span>
         {children}
       </div>
@@ -105,6 +94,7 @@ function Phase({
 
 export function Experiments({ data }: { data: AppData }) {
   const { rows, histories, clients, published } = data.experiments;
+  const { explain } = data;
   const baseline = rows.find((r) => r.run === "centralized");
   const reference = published[0];
   const [partition, setPartition] = useState("site");
@@ -125,11 +115,20 @@ export function Experiments({ data }: { data: AppData }) {
   const phase3Sorted = [...rows.filter((r) => r.phase === 3)].sort((a, b) =>
     a.run === "centralized" ? -1 : b.run === "centralized" ? 1 : 0,
   );
-  const ledger = [...phase3Sorted, ...phase4, ...phase5];
+  // Strictest budget first within each setting; the no-privacy control last.
+  const phase6 = rows
+    .filter((r) => r.phase === 6)
+    .sort(
+      (a, b) =>
+        (a.algorithm === "centralized" ? 0 : 1) - (b.algorithm === "centralized" ? 0 : 1) ||
+        (a.epsilon ?? Infinity) - (b.epsilon ?? Infinity),
+    );
+  const ledger = [...phase3Sorted, ...phase4, ...phase5, ...phase6];
   const GROUPS: Record<number, string> = {
     3: "Centralised",
     4: "Federated, IID",
     5: "Federated, non-IID",
+    6: "Differential privacy",
   };
 
   if (!ledger.length) {
@@ -163,6 +162,7 @@ export function Experiments({ data }: { data: AppData }) {
 
   const colorOf = (r: ExperimentRow) => {
     if (r.algorithm === "centralized") return r.run === "centralized" ? "var(--ink)" : "var(--muted)";
+    if (r.phase === 6) return r.algorithm === "centralized" ? "var(--ink)" : "var(--seq-4)";
     if (r.partition === "iid") return HOSPITAL_STEPS[Math.min(phase4.indexOf(r), HOSPITAL_STEPS.length - 1)];
     return "var(--seq-4)";
   };
@@ -179,7 +179,9 @@ export function Experiments({ data }: { data: AppData }) {
         key: r.run,
         value: r.macro_auroc,
         color: colorOf(r),
-        hollow: r.algorithm === "fedavg" && r.phase === 5,
+        // Hollow marks the reference member of a pair: FedAvg against
+        // FedProx, and the no-privacy control against its DP runs.
+        hollow: (r.algorithm === "fedavg" && r.phase === 5) || (r.phase === 6 && r.epsilon == null),
         label: r.setting,
         tip: <Tip row={r} baseline={baseline} />,
       },
@@ -422,14 +424,27 @@ export function Experiments({ data }: { data: AppData }) {
           )}
         </Phase>
 
-        {PENDING.map((p) => (
-          <Phase key={p.phase} num={p.phase} title={p.title} count={0}>
-            <p>{p.body}</p>
-            <div className="empty">
-              <span>Will show: {p.shows}</span>
-            </div>
-          </Phase>
-        ))}
+        <Phase num={6} title="Differential privacy" count={phase6.length}>
+          <p>
+            DP-SGD with Opacus: every record's gradient is clipped and noise is added to each step, so the model
+            provably depends little on any single ECG. Trained centrally and inside each of five federated
+            hospitals, at three privacy budgets.
+          </p>
+          <PrivacyResults rows={phase6} baseline={baseline} />
+        </Phase>
+
+        <Phase
+          num={7}
+          title="Explainability"
+          count={explain.examples.length}
+          status={`${explain.examples.length} classes explained`}
+        >
+          <p>
+            Integrated Gradients and Grad-CAM on test ECGs the baseline model detects correctly, with every beat
+            split into QRS complex, ST segment and T wave. Does the model look where a cardiologist would?
+          </p>
+          <ExplainResults explain={explain} />
+        </Phase>
       </ol>
 
       <section aria-labelledby="table-title">
@@ -439,7 +454,8 @@ export function Experiments({ data }: { data: AppData }) {
           </h2>
           <p>
             Selected at the epoch or round with the best validation AUROC; F1 uses thresholds tuned on
-            validation. Traffic counts weights sent to and from every hospital.
+            validation. Traffic counts weights sent to and from every hospital; ε is the privacy budget spent
+            (δ = 10⁻⁵), largest over hospitals for federated runs.
           </p>
         </div>
         <div className="table-wrap">
@@ -462,6 +478,9 @@ export function Experiments({ data }: { data: AppData }) {
                 <th scope="col" className="num">
                   Traffic
                 </th>
+                <th scope="col" className="num">
+                  ε
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -479,6 +498,7 @@ export function Experiments({ data }: { data: AppData }) {
                   <td className="num">
                     {r.communication_mb ? `${formatInt(Math.round(r.communication_mb))} MB` : "–"}
                   </td>
+                  <td className="num">{r.epsilon != null ? r.epsilon.toFixed(2) : "–"}</td>
                 </tr>
               ))}
             </tbody>

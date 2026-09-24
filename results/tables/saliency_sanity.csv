@@ -1,0 +1,6 @@
+superclass,n_records,integrated_gradients,grad_cam,grad_cam_random_nonzero
+NORM,100,0.4735,0.0463,1.0
+MI,100,0.4958,-0.043,0.02
+STTC,100,0.4897,0.3442,1.0
+CD,100,0.5031,-0.1489,1.0
+HYP,100,0.5149,-0.0053,0.95
