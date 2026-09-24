@@ -24,7 +24,8 @@ export const fmtAuroc = (v: number) => v.toFixed(3);
 
 export const fmtDelta = (v: number) => {
   // Round half away from zero (Math.round alone rounds -0.0155 to -0.015).
-  const r = (Math.sign(v) * Math.round(Math.abs(v) * 1000)) / 1000;
+  // The epsilon absorbs float error: 0.9013 - 0.9168 is -0.015499999...
+  const r = (Math.sign(v) * Math.round(Math.abs(v) * 1000 + 1e-9)) / 1000;
   if (r === 0) return "±0.000";
   return `${r > 0 ? "+" : "−"}${Math.abs(r).toFixed(3)}`;
 };
