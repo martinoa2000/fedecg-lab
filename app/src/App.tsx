@@ -7,6 +7,7 @@ import { Explainability } from "./views/experiments/Explainability";
 import { Federated } from "./views/experiments/Federated";
 import { Privacy } from "./views/experiments/Privacy";
 import { Results } from "./views/experiments/Results";
+import { Train } from "./views/experiments/Train";
 import { Overview } from "./views/Overview";
 import { Signals } from "./views/Signals";
 
@@ -33,6 +34,7 @@ const NAV: { label: string; routes: Route[] }[] = [
       { path: "federated", label: "Federated", view: Federated },
       { path: "privacy", label: "Privacy", view: Privacy },
       { path: "explainability", label: "Explainability", view: Explainability },
+      { path: "train", label: "Tuning and training", view: Train },
     ],
   },
 ];

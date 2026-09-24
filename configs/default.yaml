@@ -45,6 +45,11 @@ training:
   # global pooling, so it accepts either length. Chosen on the validation fold
   # only: see notebooks/02_centralized_baseline.ipynb.
   crop_samples: 250
+  # Options compared on validation with scripts/tune.py (see the dashboard's
+  # Tuning and training page). Off by default: the recipe above is phase 3's.
+  loss: bce               # bce | weighted_bce | focal
+  augment: {amplitude: 0.0, noise: 0.0, wander: 0.0, lead_dropout: 0.0}
+  ensemble_seeds: null    # e.g. [42, 43, 44]: one model per seed, averaged
   early_stopping_patience: 10
   early_stopping_metric: val_macro_auroc
   num_workers: 0

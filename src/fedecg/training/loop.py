@@ -40,6 +40,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 
+from fedecg.training.augment import augment_record, is_enabled
 from fedecg.training.metrics import macro_auroc
 
 
@@ -59,29 +60,52 @@ def resolve_device(name: str = "auto") -> torch.device:
     return torch.device(name)
 
 
-class RandomCropDataset(Dataset):
-    """In-memory records, each returned as a random window of `length` samples.
+class TrainingDataset(Dataset):
+    """In-memory training records, randomly cropped and/or augmented.
 
-    Offsets come from a seeded `torch.Generator` owned by the dataset, so the
-    sequence of crops depends only on the seed. That holds with
-    `num_workers=0`; worker processes would each get a copy of the generator.
+    Each time a record is drawn it is cut to a random window of `length`
+    samples (if given) and passed through `fedecg.training.augment` (if
+    `augment` enables anything). Randomness comes from a seeded
+    `torch.Generator` owned by the dataset, so the sequence of crops and
+    augmentations depends only on the seed. That holds with `num_workers=0`;
+    worker processes would each get a copy of the generator.
     """
 
-    def __init__(self, signals: np.ndarray, labels: np.ndarray, length: int, *, seed: int = 0):
-        if not 0 < length <= signals.shape[-1]:
+    def __init__(
+        self,
+        signals: np.ndarray,
+        labels: np.ndarray,
+        length: int | None = None,
+        *,
+        seed: int = 0,
+        augment: Mapping[str, Any] | None = None,
+        fs: float = 100.0,
+    ):
+        if length is not None and not 0 < length <= signals.shape[-1]:
             raise ValueError(f"crop length {length} must be in (0, {signals.shape[-1]}]")
         self.signals = torch.from_numpy(signals)
         self.labels = torch.from_numpy(labels)
         self.length = length
+        self.augment = dict(augment) if is_enabled(augment) else None
+        self.fs = fs
         self.generator = torch.Generator().manual_seed(seed)
 
     def __len__(self) -> int:
         return len(self.signals)
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
-        slack = self.signals.shape[-1] - self.length
-        start = int(torch.randint(slack + 1, (1,), generator=self.generator))
-        return self.signals[index, :, start : start + self.length], self.labels[index]
+        signal = self.signals[index]
+        if self.length is not None:
+            slack = signal.shape[-1] - self.length
+            start = int(torch.randint(slack + 1, (1,), generator=self.generator))
+            signal = signal[:, start : start + self.length]
+        if self.augment is not None:
+            signal = augment_record(signal, self.augment, self.generator, fs=self.fs)
+        return signal, self.labels[index]
+
+
+RandomCropDataset = TrainingDataset
+"""Earlier name, kept so older code and notebooks still import."""
 
 
 def make_loader(
@@ -93,19 +117,21 @@ def make_loader(
     seed: int = 0,
     num_workers: int = 0,
     crop_samples: int | None = None,
+    augment: Mapping[str, Any] | None = None,
 ) -> DataLoader:
     """Wrap in-memory arrays in a `DataLoader`.
 
     Shuffling draws from its own seeded `torch.Generator`, so the batch order
     is reproducible and independent of any other use of torch's global RNG.
-    With `crop_samples`, every record is returned as a random crop of that many
-    samples (training only; evaluation scores the whole record).
+    With `crop_samples` and/or `augment` (the config's `training.augment`),
+    every record is returned cropped and augmented: for training only;
+    evaluation scores the whole, untouched record.
     """
     dataset: Dataset
-    if crop_samples is None:
+    if crop_samples is None and not is_enabled(augment):
         dataset = TensorDataset(torch.from_numpy(signals), torch.from_numpy(labels))
     else:
-        dataset = RandomCropDataset(signals, labels, crop_samples, seed=seed)
+        dataset = TrainingDataset(signals, labels, crop_samples, seed=seed, augment=augment)
     generator = torch.Generator().manual_seed(seed) if shuffle else None
     return DataLoader(
         dataset,
@@ -114,6 +140,48 @@ def make_loader(
         generator=generator,
         num_workers=num_workers,
     )
+
+
+class FocalLoss(nn.Module):
+    """Binary focal loss (Lin et al., 2017), averaged over records and classes.
+
+    Scales each term of the cross-entropy by `(1 - p_t) ** gamma`, so records
+    the model already gets right contribute little and hard ones (often the
+    rare classes) dominate the gradient.
+    """
+
+    def __init__(self, gamma: float = 2.0):
+        super().__init__()
+        self.gamma = gamma
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:  # noqa: D102
+        bce = nn.functional.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+        p_t = torch.exp(-bce)
+        return ((1 - p_t) ** self.gamma * bce).mean()
+
+
+LOSSES: tuple[str, ...] = ("bce", "weighted_bce", "focal")
+
+
+def make_loss(training_config: Mapping[str, Any], labels: np.ndarray) -> nn.Module:
+    """The training loss named by `training.loss` (default `bce`).
+
+    Args:
+        training_config: Uses `loss` and, for `focal`, `focal_gamma`.
+        labels: Multi-hot training labels; `weighted_bce` weights each class's
+            positives by its negative-to-positive ratio, so a class present in
+            12% of records counts about as much as one present in 44%.
+    """
+    name = training_config.get("loss", "bce")
+    if name == "bce":
+        return nn.BCEWithLogitsLoss()
+    if name == "weighted_bce":
+        positives = labels.sum(axis=0)
+        ratio = (len(labels) - positives) / np.maximum(positives, 1)
+        return nn.BCEWithLogitsLoss(pos_weight=torch.tensor(ratio, dtype=torch.float32))
+    if name == "focal":
+        return FocalLoss(float(training_config.get("focal_gamma", 2.0)))
+    raise ValueError(f"Unknown loss {name!r}; use one of {LOSSES}")
 
 
 def lr_factor(progress: float, schedule: str = "constant", warmup_fraction: float = 0.0) -> float:
@@ -327,6 +395,7 @@ def fit(
     on_epoch: EpochCallback | None = None,
     progress: bool = False,
     wrap: WrapFn | None = None,
+    loss_fn: nn.Module | None = None,
 ) -> FitResult:
     """Train with AdamW and stop when validation macro AUROC stops improving.
 
@@ -342,6 +411,7 @@ def fit(
         device: Where `model` lives.
         on_epoch: Called with each epoch's metrics dict, e.g. to log to MLflow.
         progress: Print one line per epoch.
+        loss_fn: Training loss (see `make_loss`); plain BCE by default.
         wrap: Applied to the model, optimizer and training loader before the
             first epoch (see `fedecg.privacy.PrivateTraining.wrap`). The
             wrapped model must share parameters with `model`, which is still
@@ -357,7 +427,7 @@ def fit(
     epochs = int(training_config["epochs"])
     stopper = EarlyStopping(int(training_config.get("early_stopping_patience", epochs)))
 
-    loss_fn = nn.BCEWithLogitsLoss()
+    loss_fn = (loss_fn or nn.BCEWithLogitsLoss()).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=float(training_config["learning_rate"]),

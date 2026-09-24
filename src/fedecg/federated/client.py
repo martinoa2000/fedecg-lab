@@ -79,6 +79,7 @@ class ECGClient(NumPyClient):
             shuffle=True,
             seed=seed,
             crop_samples=training_config.get("crop_samples"),
+            augment=training_config.get("augment"),
         )
 
     def get_parameters(self, config: dict[str, Any]) -> NDArrays:  # noqa: D102

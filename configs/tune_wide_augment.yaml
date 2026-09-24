@@ -1,0 +1,11 @@
+# Baseline tuning: the wider network with the extra augmentation.
+
+extends: centralized.yaml
+
+experiment: {setting: "Wider network + augmentation"}
+
+model:
+  base_channels: 64
+
+training:
+  augment: {amplitude: 0.1, noise: 0.05, wander: 0.1, lead_dropout: 0.1}

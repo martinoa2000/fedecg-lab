@@ -3,18 +3,19 @@
 #
 # Runs the phases in order; each step writes its tables to results/tables/ and
 # one row per experiment to results/tables/experiments.csv. Total time on an
-# Apple M-series laptop: about two and a half hours, almost all of it phase 6
-# (DP-SGD computes a gradient per record).
+# Apple M-series laptop: about three and a half hours, most of it phase 6
+# (DP-SGD computes a gradient per record) and the tuning study.
 #
 # Usage:
 #   scripts/reproduce.sh            # everything
 #   scripts/reproduce.sh 5 6        # only phases 5 and 6 (needs earlier checkpoints)
+#   scripts/reproduce.sh tune       # only the baseline tuning study (about 50 minutes)
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 phases=("$@")
-[[ ${#phases[@]} -eq 0 ]] && phases=(2 3 4 5 6 7)
+[[ ${#phases[@]} -eq 0 ]] && phases=(2 3 tune 4 5 6 7)
 wants() { [[ " ${phases[*]} " == *" $1 "* ]]; }
 run() { echo "+ $*" >&2; uv run python "$@"; }
 
@@ -28,6 +29,14 @@ if wants 3; then
   for config in centralized centralized_plain; do
     run scripts/train_centralized.py --config "$config.yaml"
   done
+fi
+
+if wants tune; then
+  # Validation-only study of training options, then the winner scored once.
+  for config in tune_baseline tune_wide tune_augment tune_weighted tune_focal tune_ensemble tune_wide_augment tune_best; do
+    run scripts/tune.py --config "$config.yaml"
+  done
+  run scripts/train_centralized.py --config "centralized_tuned.yaml"
 fi
 
 if wants 4; then

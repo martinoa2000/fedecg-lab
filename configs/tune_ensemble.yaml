@@ -1,0 +1,8 @@
+# Baseline tuning: three models with different seeds, probabilities averaged.
+
+extends: centralized.yaml
+
+experiment: {setting: "Ensemble of 3 seeds"}
+
+training:
+  ensemble_seeds: [42, 43, 44]

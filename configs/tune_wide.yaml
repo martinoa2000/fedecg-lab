@@ -1,0 +1,8 @@
+# Baseline tuning: twice the channels at every stage (about 4x the parameters).
+
+extends: centralized.yaml
+
+experiment: {setting: "Wider network (64 base channels)"}
+
+model:
+  base_channels: 64
