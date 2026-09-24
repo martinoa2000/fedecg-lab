@@ -1,6 +1,6 @@
 [project]
 name = "fedecg-lab"
-version = "0.1.0"
+version = "1.0.0"
 description = "Multi-label 12-lead ECG classification: centralized vs. federated training with differential privacy and explainability."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"

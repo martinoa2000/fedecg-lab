@@ -448,7 +448,7 @@ export function Train({ data }: { data: AppData }) {
         <div className="section-head">
           <h2 id="study-title">What helped on validation</h2>
           <p>
-            Each setting changes one thing in the phase 3 recipe (the last combines two) and is scored on fold 9.
+            Each setting changes one thing in the recipe as it was before tuning (the last rows combine winners) and is scored on fold 9. The winner, wider + augmentation, is now the phase 3 recipe.
             The test fold is untouched, so these can be compared freely; a winner still has to be trained for
             real and tested once.
           </p>
@@ -473,7 +473,9 @@ export function Train({ data }: { data: AppData }) {
           <p className="server-status" data-online={online ?? undefined}>
             {online === null
               ? "Looking for the training server…"
-              : online
+              : online === false && !import.meta.env.DEV
+                ? "This is a published copy of the dashboard; it cannot train."
+                : online
                 ? training
                   ? "Training server connected. One run trains at a time; new ones wait in the queue."
                   : "Training server connected and idle."
@@ -481,14 +483,28 @@ export function Train({ data }: { data: AppData }) {
           </p>
         </div>
 
-        {online === false && (
-          <div className="empty">
-            <span>Start it from the repository root and keep that terminal open; this page connects on its own:</span>
-            <pre>
-              <code>uv run python scripts/serve.py</code>
-            </pre>
-          </div>
-        )}
+        {online === false &&
+          (import.meta.env.DEV ? (
+            <div className="empty">
+              <span>Start it from the repository root and keep that terminal open; this page connects on its own:</span>
+              <pre>
+                <code>uv run python scripts/serve.py</code>
+              </pre>
+            </div>
+          ) : (
+            // A published copy of the dashboard has no training server behind it.
+            <div className="empty">
+              <span>
+                Training runs on your own machine. Clone the repository, download PTB-XL, then start the training
+                server and the dashboard:
+              </span>
+              <pre>
+                <code>
+                  {"uv run python scripts/download_data.py\nuv run python scripts/serve.py\nnpm --prefix app run dev"}
+                </code>
+              </pre>
+            </div>
+          ))}
 
         {online && (
           <>
