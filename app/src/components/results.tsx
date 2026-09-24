@@ -84,13 +84,20 @@ export function DotPlot({
   const tip = useTip();
   const [lo, hi] = domain;
   const pct = (v: number) => `${((v - lo) / (hi - lo)) * 100}%`;
+  // Reference labels closer than an eighth of the axis would overlap: stack them.
+  const sortedRefs = [...references].sort((a, b) => a.value - b.value);
+  const stacked = sortedRefs.some((r, i) => i > 0 && (r.value - sortedRefs[i - 1].value) / (hi - lo) < 0.12);
   return (
     <div className="dotplot" role="group" aria-label={ariaLabel}>
-      <div className="dot-row dot-refs" aria-hidden>
+      <div className="dot-row dot-refs" data-stacked={stacked || undefined} aria-hidden>
         <span />
         <span className="dot-track">
-          {references.map((r) => (
-            <span key={r.key} className="ref-label" style={{ left: pct(r.value) }}>
+          {references.map((r, i) => (
+            <span
+              key={r.key}
+              className="ref-label"
+              style={{ left: pct(r.value), bottom: stacked && i % 2 ? 20 : 4 }}
+            >
               {r.label}
             </span>
           ))}

@@ -1,17 +1,46 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { TooltipProvider } from "./components/charts";
 import { useAppData, type AppData } from "./data";
 import { Dataset } from "./views/Dataset";
-import { Experiments } from "./views/Experiments";
+import { Baseline } from "./views/experiments/Baseline";
+import { Explainability } from "./views/experiments/Explainability";
+import { Federated } from "./views/experiments/Federated";
+import { Privacy } from "./views/experiments/Privacy";
+import { Results } from "./views/experiments/Results";
 import { Overview } from "./views/Overview";
 import { Signals } from "./views/Signals";
 
-const ROUTES = [
-  { path: "", label: "Overview", view: Overview },
-  { path: "dataset", label: "Dataset", view: Dataset },
-  { path: "signals", label: "Signals", view: Signals },
-  { path: "experiments", label: "Experiments", view: Experiments },
-] as const;
+interface Route {
+  path: string;
+  label: string;
+  view: (props: { data: AppData }) => ReactElement;
+}
+
+const NAV: { label: string; routes: Route[] }[] = [
+  {
+    label: "Data",
+    routes: [
+      { path: "", label: "Overview", view: Overview },
+      { path: "dataset", label: "Dataset", view: Dataset },
+      { path: "signals", label: "Signals", view: Signals },
+    ],
+  },
+  {
+    label: "Experiments",
+    routes: [
+      { path: "results", label: "Results", view: Results },
+      { path: "baseline", label: "Baseline", view: Baseline },
+      { path: "federated", label: "Federated", view: Federated },
+      { path: "privacy", label: "Privacy", view: Privacy },
+      { path: "explainability", label: "Explainability", view: Explainability },
+    ],
+  },
+];
+
+const ROUTES = NAV.flatMap((group) => group.routes);
+
+/** Old links keep working: the single Experiments page became Results. */
+const ALIASES: Record<string, string> = { experiments: "results" };
 
 // Mirrors the roadmap in README.md. Update when a phase lands.
 const ROADMAP = [
@@ -24,7 +53,7 @@ const ROADMAP = [
   "Explainability",
   "Write-up",
 ];
-const PHASES_DONE = 7;
+const PHASES_DONE = 8;
 
 function useRoute() {
   const read = () => window.location.hash.replace(/^#\/?/, "");
@@ -58,7 +87,8 @@ function Logo() {
 
 function Shell({ data }: { data: AppData }) {
   const route = useRoute();
-  const current = ROUTES.find((r) => r.path === route) ?? ROUTES[0];
+  const path = ALIASES[route] ?? route;
+  const current = ROUTES.find((r) => r.path === path) ?? ROUTES[0];
   const View = current.view;
 
   useEffect(() => {
@@ -73,10 +103,17 @@ function Shell({ data }: { data: AppData }) {
           <span>fedecg-lab</span>
         </a>
         <nav className="nav" aria-label="Sections">
-          {ROUTES.map((r) => (
-            <a key={r.path} href={`#/${r.path}`} aria-current={r === current ? "page" : undefined}>
-              {r.label}
-            </a>
+          {NAV.map((group) => (
+            <div key={group.label} className="nav-group" role="group" aria-labelledby={`nav-${group.label}`}>
+              <h2 id={`nav-${group.label}`} className="nav-heading">
+                {group.label}
+              </h2>
+              {group.routes.map((r) => (
+                <a key={r.path} href={`#/${r.path}`} aria-current={r === current ? "page" : undefined}>
+                  {r.label}
+                </a>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="roadmap">
