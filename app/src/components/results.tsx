@@ -145,7 +145,7 @@ export function DotPlot({
         <span className="dot-track">
           {ticksOf(domain, tickStep).map((t) => (
             <span key={t} className="tick" style={{ left: pct(t) }}>
-              {tickStep >= 0.5 ? t.toFixed(1) : t.toFixed(2)}
+              {t.toFixed(tickStep >= 0.5 ? 1 : tickStep >= 0.01 ? 2 : 3)}
             </span>
           ))}
         </span>

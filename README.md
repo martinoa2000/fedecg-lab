@@ -166,13 +166,38 @@ done
 uv run python scripts/explain_model.py   # explains checkpoints/centralized.pt
 ```
 
-Or reproduce every number in this README in one go (about two and a half
-hours, mostly DP-SGD); pass phase numbers to run only some of them:
+Or reproduce every number in this README in one go (about three and a half
+hours, mostly DP-SGD and the tuning study); pass phase numbers to run only
+some of them:
 
 ```bash
-scripts/reproduce.sh          # phases 2-7, then the dashboard export
+scripts/reproduce.sh          # phases 2-7 and the tuning study, then the export
 scripts/reproduce.sh 6 7      # only privacy and explanations
 ```
+
+Try to raise the baseline without touching the test fold. `scripts/tune.py`
+trains exactly like the baseline but scores only the validation fold, and
+writes one row per setting to `results/tables/tuning.csv`. The options are
+config keys: `model.base_channels`, `training.augment` (gain, noise, baseline
+wander, lead dropout), `training.loss` (`bce`, `weighted_bce`, `focal`) and
+`training.ensemble_seeds`:
+
+```bash
+uv run python scripts/tune.py --config tune_wide_augment.yaml
+```
+
+Or do it from the dashboard. Start the local training server in one terminal
+and the dashboard in another; the **Tuning and training** page then lets you
+pick options, start a validation-only run, follow its curve live, stop it, or
+rerun any experiment config for real:
+
+```bash
+uv run python scripts/serve.py      # training server on 127.0.0.1:8765
+npm --prefix app run dev            # dashboard; its /api proxy reaches the server
+```
+
+The server binds to 127.0.0.1 only, rejects requests from other origins, runs
+one job at a time, and re-exports the dashboard data after each finished run.
 
 Run the test suite:
 
@@ -219,6 +244,7 @@ smaller than about 0.003 are noise. Full table: `results/tables/experiments.csv`
 | | Published `resnet1d_wang` (Strodthoff et al., 2021) | 1 | 0.930 | |
 | 3 | **Centralized** (random crops, cosine LR) | 1 | **0.916** | |
 | 3 | Centralized, full-length records, constant LR | 1 | 0.909 | −0.007 |
+| 3 | Centralized, tuned (wider, augmented, 3 seeds) | 1 | 0.922 | +0.006 |
 | 4 | FedAvg, IID | 5 | 0.908 | −0.007 |
 | 4 | FedAvg, IID | 10 | 0.899 | −0.016 |
 | 4 | FedAvg, IID | 20 | 0.892 | −0.024 |
@@ -230,6 +256,25 @@ smaller than about 0.003 are noise. Full table: `results/tables/experiments.csv`
 | 6 | Centralized, DP-SGD, ε = 8 / 3 / 1 | 1 | 0.874 / 0.863 / 0.832 | −0.042 / −0.053 / −0.084 |
 | 6 | FedAvg IID, DP recipe without privacy | 5 | 0.867 | −0.049 |
 | 6 | FedAvg IID, DP-SGD per hospital, ε = 8 / 3 / 1 | 5 | 0.840 / 0.821 / 0.755 | −0.076 / −0.095 / −0.160 |
+
+The tuned row is the winner of a validation-only study of training options
+(`results/tables/tuning.csv`), scored on test once. Every other row is still
+measured against the untuned baseline, so the phases stay comparable:
+
+| Setting (validation fold only) | Val macro AUROC | vs. phase 3 recipe |
+|---|---:|---:|
+| Phase 3 recipe | 0.920 | |
+| Focal loss | 0.920 | ±0.000 |
+| Class-weighted loss | 0.922 | +0.001 |
+| More augmentation (gain, noise, wander, lead dropout) | 0.922 | +0.002 |
+| Wider network (64 base channels, 1.6M parameters) | 0.922 | +0.002 |
+| Wider network + augmentation | 0.925 | +0.004 |
+| Ensemble of 3 seeds | 0.925 | +0.005 |
+| **Wider + augmentation, ensemble of 3** | **0.928** | **+0.007** |
+
+Single models vary by about ±0.002 between seeds on validation, so the loss
+changes and each option on its own are within noise; capacity, augmentation
+and averaging only pay off together.
 
 The DP rows use their own recipe (batches of 1,024 centrally, 30 epochs or
 rounds), which costs AUROC even without noise; the privacy cost proper is each
@@ -257,10 +302,10 @@ What the numbers say, phase by phase, is in the notebooks: decentralization
 
 ```
 fedecg-lab/
-├── app/              # Dashboard (Vite + React): data, signals, results
+├── app/              # Dashboard (Vite + React): data, results, training page
 ├── configs/          # Experiment configs (YAML, with `extends` inheritance)
 ├── notebooks/        # 01..06, numbered; concepts explained before code
-├── scripts/          # Data download, experiment entry points, reproduce.sh
+├── scripts/          # Data download, experiments, tune.py, serve.py, reproduce.sh
 ├── src/fedecg/       # The reusable package
 │   ├── data/         # PTB-XL loading, labels, preprocessing, partitioning
 │   ├── models/       # 1D ResNet

@@ -8,7 +8,8 @@ waveforms, which this repository does not redistribute):
     signals.json      a few example records per superclass, raw and band-passed
     experiments.json  rows of `results/tables/experiments.csv`, each run's
                       training curve and, for federated runs, every hospital's
-                      size and label mix
+                      size and label mix; plus the validation-only tuning
+                      study from `results/tables/tuning.csv`
     explain.json      saliency tables from `scripts/explain_model.py` and one
                       example record per class with its attribution map
 
@@ -159,15 +160,39 @@ def signal_examples(meta: pd.DataFrame, config: dict, root: Path, per_class: int
     return {"fs": fs, "leads": list(LEAD_NAMES), "examples": examples, "records": records}
 
 
+def tuning_results(tables: Path) -> dict:
+    """Validation-only tuning rows (scripts/tune.py) and their curves."""
+    summary = tables / "tuning.csv"
+    if not summary.exists():
+        return {"rows": [], "histories": {}}
+    table = pd.read_csv(summary)
+    histories = {}
+    for run in table["run"]:
+        history = tables / f"tuning_{run}_history.csv"
+        if history.exists():
+            curve = pd.read_csv(history).rename(columns={"epoch": "step"})
+            keep = ["step", "train_loss", "val_loss", "val_macro_auroc"]
+            histories[run] = json.loads(curve[keep].round(4).to_json(orient="records"))
+    return {"rows": json.loads(table.to_json(orient="records")), "histories": histories}
+
+
 def experiment_results(tables: Path) -> dict:
     """Summary rows plus, per run, its training curve and client breakdown.
 
     Curves are keyed by run name. Centralized histories are indexed by epoch
-    and federated ones by round; both are exported as a common `step`.
+    and federated ones by round; both are exported as a common `step`. The
+    validation-only tuning study rides along under `tuning`.
     """
     summary = tables / "experiments.csv"
+    tuning = tuning_results(tables)
     if not summary.exists():
-        return {"rows": [], "histories": {}, "clients": {}, "published": PUBLISHED}
+        return {
+            "rows": [],
+            "histories": {},
+            "clients": {},
+            "published": PUBLISHED,
+            "tuning": tuning,
+        }
     table = pd.read_csv(summary)
     histories, clients = {}, {}
     for run in table["run"]:
@@ -184,6 +209,7 @@ def experiment_results(tables: Path) -> dict:
         "histories": histories,
         "clients": clients,
         "published": PUBLISHED,
+        "tuning": tuning,
     }
 
 

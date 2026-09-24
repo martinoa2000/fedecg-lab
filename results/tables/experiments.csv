@@ -1,6 +1,7 @@
 phase,run,setting,algorithm,partition,n_clients,macro_auroc,macro_f1,auroc_NORM,auroc_MI,auroc_STTC,auroc_CD,auroc_HYP,best_step,steps_run,communication_mb,epsilon,seconds
 3,centralized,Centralized,centralized,none,1,0.9156,0.7296,0.9436,0.9222,0.936,0.9264,0.8496,26,36,0.0,,99.9
 3,centralized_plain,"Centralized, full-length, constant LR",centralized,none,1,0.909,0.7193,0.9374,0.916,0.9341,0.9237,0.8336,12,22,0.0,,169.4
+3,centralized_tuned,"Centralized, tuned (wider, augmented, 3 seeds)",centralized,none,1,0.9215,0.7312,0.9472,0.9339,0.9411,0.9332,0.852,33,43,0.0,,909.1
 4,fedavg_iid_10,"FedAvg, IID, 10 hospitals",fedavg,iid,10,0.8992,0.7046,0.9347,0.8979,0.9335,0.9064,0.8233,49,50,1587.3,,143.0
 4,fedavg_iid_20,"FedAvg, IID, 20 hospitals",fedavg,iid,20,0.8918,0.6967,0.9306,0.8844,0.9295,0.899,0.8154,48,50,3174.7,,162.6
 4,fedavg_iid_5,"FedAvg, IID, 5 hospitals",fedavg,iid,5,0.9085,0.7207,0.94,0.9138,0.9353,0.9162,0.8371,43,50,793.7,,139.9

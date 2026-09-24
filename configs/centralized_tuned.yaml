@@ -1,0 +1,15 @@
+# Phase 3, tuned: the setting that won the validation-only study
+# (results/tables/tuning.csv, configs/tune_*.yaml). A network twice as wide,
+# gain / noise / wander / lead-dropout augmentation, and three seeds averaged.
+# The other phases still measure against `centralized.yaml`.
+
+extends: centralized.yaml
+
+experiment: {phase: 3, setting: "Centralized, tuned (wider, augmented, 3 seeds)"}
+
+model:
+  base_channels: 64
+
+training:
+  augment: {amplitude: 0.1, noise: 0.05, wander: 0.1, lead_dropout: 0.1}
+  ensemble_seeds: [42, 43, 44]

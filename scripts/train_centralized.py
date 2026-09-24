@@ -9,6 +9,10 @@ Pipeline:
 4. Train the 1D ResNet with early stopping on validation macro AUROC.
 5. Tune one F1 threshold per class on validation, then evaluate test once.
 
+`training.augment`, `training.loss` and `training.ensemble_seeds` select the
+options in `fedecg.training.centralized`; an ensemble averages its members'
+probabilities. Tune them on validation with `scripts/tune.py` first.
+
 With `privacy.enabled`, step 4 runs DP-SGD (roadmap phase 6) and the epsilon
 spent is reported and recorded.
 
@@ -44,8 +48,9 @@ from fedecg.models.resnet1d import build_model, count_parameters
 from fedecg.paths import CACHE_DIR, CHECKPOINT_DIR, PTBXL_DIR, TABLES_DIR, ensure_dir
 from fedecg.privacy.dp_sgd import private_training_from_config
 from fedecg.seed import set_seed
+from fedecg.training.centralized import ensemble_seeds, train_centralized
 from fedecg.training.evaluate import final_evaluation
-from fedecg.training.loop import fit, make_loader, resolve_device
+from fedecg.training.loop import make_loader, resolve_device
 from fedecg.training.results import experiment_row, record_experiment
 from fedecg.training.tracking import start_run
 
@@ -86,21 +91,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(data.x_train)} train, {len(data.x_val)} val, {len(data.x_test)} test records")
 
     batch_size = int(train_cfg["batch_size"])
-    train_loader = make_loader(
-        data.x_train,
-        data.y_train,
-        batch_size=batch_size,
-        shuffle=True,
-        seed=seed,
-        num_workers=int(train_cfg.get("num_workers", 0)),
-        crop_samples=train_cfg.get("crop_samples"),
-    )
     val_loader = make_loader(data.x_val, data.y_val, batch_size=batch_size, shuffle=False)
     test_loader = make_loader(data.x_test, data.y_test, batch_size=batch_size, shuffle=False)
 
     device = resolve_device(train_cfg.get("device", "auto"))
-    model = build_model(config["model"]).to(device)
-    print(f"resnet1d with {count_parameters(model):,} parameters on {device}")
+    n_parameters = count_parameters(build_model(config["model"]))
+    seeds = ensemble_seeds(config)
+    print(
+        f"resnet1d with {n_parameters:,} parameters on {device}"
+        + (f", ensemble of {len(seeds)} (seeds {seeds})" if len(seeds) > 1 else "")
+    )
 
     # DP-SGD (phase 6) when the config enables it; the budget covers every
     # planned epoch, whether or not early stopping ends training sooner.
@@ -115,20 +115,20 @@ def main(argv: list[str] | None = None) -> int:
 
     with start_run(config.get("tracking", {}), run_name=name) as tracker:
         tracker.log_params(config)
-        tracker.log_params({"n_train": len(data.x_train), "n_parameters": count_parameters(model)})
+        tracker.log_params({"n_train": len(data.x_train), "n_parameters": n_parameters})
 
-        result = fit(
-            model,
-            train_loader,
-            val_loader,
-            train_cfg,
+        members = train_centralized(
+            config,
+            data,
             device,
-            on_epoch=lambda row: tracker.log_metrics(
-                {k: v for k, v in row.items() if k != "epoch"}, step=int(row["epoch"])
+            # One MLflow step series per member: step = member * 1000 + epoch.
+            on_epoch=lambda member, row: tracker.log_metrics(
+                {k: v for k, v in row.items() if k != "epoch"},
+                step=member * 1000 + int(row["epoch"]),
             ),
-            progress=True,
             wrap=private.wrap if private is not None else None,
         )
+        result = members[0].result
         print(f"best epoch {result.best_epoch}: val macro AUROC {result.best_score:.4f}")
         epsilon = None
         if private is not None:
@@ -136,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
             epsilon = private.epsilon()
             print(f"epsilon spent: {epsilon:.3f} at delta {private.delta}")
 
-        table, thresholds = final_evaluation(model, val_loader, test_loader, device, train_cfg)
+        models = [m.model for m in members]
+        table, thresholds = final_evaluation(models, val_loader, test_loader, device, train_cfg)
         print(table.round(4).to_string())
 
         tables = ensure_dir(args.tables)
@@ -148,7 +149,9 @@ def main(argv: list[str] | None = None) -> int:
         checkpoint_path = ensure_dir(args.checkpoints) / f"{name}.pt"
         torch.save(
             {
-                "model_state": model.state_dict(),
+                "model_state": models[0].state_dict(),
+                # Every member when the run is an ensemble; model_state is the first.
+                "ensemble_states": [m.state_dict() for m in models] if len(models) > 1 else None,
                 "config": config,
                 "standardizer": data.standardizer.to_dict() if data.standardizer else None,
                 "thresholds": thresholds.tolist(),

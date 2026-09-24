@@ -10,6 +10,8 @@
 *.hea
 
 # Experiment tracking and artifacts
+# Runs started from the dashboard's Train page (scripts/serve.py).
+/runs/
 mlruns/
 mlartifacts/
 checkpoints/

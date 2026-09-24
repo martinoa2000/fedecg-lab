@@ -107,7 +107,29 @@ export interface PublishedResult {
   source: string;
 }
 
+/** One validation-only setting from `results/tables/tuning.csv`. */
+export interface TuningRow {
+  run: string;
+  setting: string;
+  base_channels: number;
+  n_parameters: number;
+  crop_samples: number | null;
+  augment: string;
+  loss: string;
+  seeds: number;
+  val_macro_auroc: number;
+  val_auroc_NORM?: number;
+  val_auroc_MI?: number;
+  val_auroc_STTC?: number;
+  val_auroc_CD?: number;
+  val_auroc_HYP?: number;
+  member_val_macro_auroc: number;
+  best_epoch: number;
+  seconds: number;
+}
+
 export interface Experiments {
+  tuning: { rows: TuningRow[]; histories: Record<string, CurvePoint[]> };
   rows: ExperimentRow[];
   histories: Record<string, CurvePoint[]>;
   clients: Record<string, ClientRow[]>;
@@ -199,6 +221,7 @@ export function useAppData(): LoadState {
               histories: experiments.histories ?? {},
               clients: experiments.clients ?? {},
               published: experiments.published ?? [],
+              tuning: experiments.tuning ?? { rows: [], histories: {} },
             },
             explain,
           },

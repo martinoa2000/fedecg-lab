@@ -1,0 +1,9 @@
+# Baseline tuning: the two winners combined, a wider augmented network
+# ensembled over three seeds.
+
+extends: tune_wide_augment.yaml
+
+experiment: {setting: "Wider + augmentation, ensemble of 3"}
+
+training:
+  ensemble_seeds: [42, 43, 44]

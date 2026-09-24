@@ -1,0 +1,8 @@
+# Baseline tuning: positives of each class weighted by its negative/positive ratio.
+
+extends: centralized.yaml
+
+experiment: {setting: "Class-weighted loss"}
+
+training:
+  loss: weighted_bce

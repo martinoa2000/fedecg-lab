@@ -281,7 +281,7 @@ class TestReproduce:
                     for (var, _), value in zip(stack, combo, strict=True):
                         name = re.sub(rf"\$\{{?{var}\}}?", value, name)
                     names.add(name)
-        assert len(names) == 19  # phases 3-6: 2 + 3 + 6 + 8
+        assert len(names) == 28  # phases 3-6: 2 + 3 + 6 + 8; tuning: 8 + 1
         missing = sorted(n for n in names if not (PROJECT_ROOT / "configs" / n).is_file())
         assert missing == []
 
@@ -291,3 +291,59 @@ class TestReproduce:
         script = (PROJECT_ROOT / "scripts" / "reproduce.sh").read_text()
         for name in set(re.findall(r"run (scripts/\w+\.py)", script)):
             assert (PROJECT_ROOT / name).is_file(), name
+
+
+class TestTune:
+    def test_scores_validation_and_writes_a_tuning_row(self, fake_ptbxl, tmp_path):
+        script = load_script("tune")
+        config = tmp_path / "tiny_tune.yaml"
+        config.write_text(
+            "extends: smoke.yaml\n"
+            "data: {subsample: null}\n"
+            "model: {base_channels: 8, blocks_per_stage: [1], norm_groups: 4}\n"
+            "training: {epochs: 1, batch_size: 4, device: cpu, loss: focal, ensemble_seeds: [1, 2],"
+            " augment: {noise: 0.05}}\n"
+            "experiment: {setting: Tiny try}\n"
+        )
+        tables = tmp_path / "tables"
+
+        exit_code = script.main(
+            [
+                "--config",
+                str(config),
+                "--root",
+                str(fake_ptbxl),
+                "--no-cache",
+                "--tables",
+                str(tables),
+            ]
+        )
+
+        assert exit_code == 0
+        assert {p.name for p in tables.iterdir()} == {"tuning.csv", "tuning_tiny_tune_history.csv"}
+        row = pd.read_csv(tables / "tuning.csv").iloc[0]
+        assert row["setting"] == "Tiny try"
+        assert row["seeds"] == 2 and row["loss"] == "focal" and row["augment"] == "noise 0.05"
+        # Never the test fold: no experiments.csv, no test metrics.
+        assert not (tables / "experiments.csv").exists()
+
+    def test_centralized_training_trains_every_ensemble_member(self, fake_ptbxl, tmp_path):
+        script = load_script("train_centralized")
+        config = tmp_path / "tiny_ens.yaml"
+        config.write_text(
+            "extends: smoke.yaml\n"
+            "data: {subsample: null}\n"
+            "model: {base_channels: 8, blocks_per_stage: [1], norm_groups: 4}\n"
+            "training: {epochs: 1, batch_size: 4, device: cpu, ensemble_seeds: [1, 2, 3]}\n"
+        )
+        script.main(
+            [
+                "--config", str(config),
+                "--root", str(fake_ptbxl),
+                "--no-cache",
+                "--tables", str(tmp_path / "tables"),
+                "--checkpoints", str(tmp_path / "ckpt"),
+            ]
+        )  # fmt: skip
+        state = torch.load(tmp_path / "ckpt" / "tiny_ens.pt", weights_only=False)
+        assert len(state["ensemble_states"]) == 3
