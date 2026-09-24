@@ -18,24 +18,29 @@ each step.
 
 ## Findings
 
-Test macro AUROC on PTB-XL's official test fold; the centralized baseline
-scores **0.916** (published `resnet1d_wang`: 0.930).
+Test macro AUROC on PTB-XL's official test fold. The centralized baseline, a
+1D ResNet tuned on the validation fold, scores **0.917**; averaging three
+seeds of it reaches **0.922** (published `resnet1d_wang`: 0.930).
 
-1. **Decentralization costs 0.007 to 0.024 AUROC**, growing with the number of
+1. **Decentralization costs 0.007 to 0.026 AUROC**, growing with the number of
    hospitals (5, 10, 20), at equal compute. Most of it is slower progress per
    pass over the data, not a lower ceiling.
 2. **Realistic heterogeneity adds almost nothing.** Hospitals built from real
-   recording sites and ECG devices, with very different label mixes, score like
-   the same number of random hospitals. Only extreme synthetic label skew
-   costs a further ~0.010, and FedProx recovers none of it.
+   recording sites and ECG devices, with very different label mixes, score as
+   well as the same number of random hospitals or better. Only extreme
+   synthetic label skew costs a further ~0.017, and FedProx recovers none of it.
 3. **Privacy is the expensive step.** DP-SGD at ε = 8 / 3 / 1 costs 0.024 /
    0.035 / 0.066 against the same recipe without privacy, and more when each of
    five hospitals applies it to its own, smaller dataset: 0.027 / 0.046 / 0.112.
 4. **The model recognizes infarction from the QRS complex, not the ST
-   segment**, consistent with PTB-XL's mostly old infarcts and their Q waves.
-   On the way there: zero-baseline Integrated Gradients is invalid for this
+   segment**, consistent with PTB-XL's mostly old infarcts and their Q waves,
+   and the finding held after the network was retrained wider. On the way
+   there: zero-baseline Integrated Gradients is invalid for this
    (scale-invariant) network, and even corrected IG maps mostly show the
    input's shape; Grad-CAM largely passes the model-randomization test.
+
+All findings were measured twice, before and after the baseline was tuned,
+and each held; the numbers here are from the tuned baseline.
 
 ## The question
 
@@ -236,34 +241,41 @@ uv run pre-commit install
 ## Results
 
 Test macro AUROC on the official test fold (fold 10), one run per setting with
-seed 42. Retraining the baseline with three seeds spans 0.915 to 0.917, so gaps
-smaller than about 0.003 are noise. Full table: `results/tables/experiments.csv`.
+seed 42. Retraining the baseline with three seeds gives 0.917, 0.919 and 0.918,
+so gaps smaller than about 0.003 are noise. Full table:
+`results/tables/experiments.csv`.
 
 | Phase | Setting | Hospitals | Macro AUROC | vs. centralized |
 |---|---|---:|---:|---:|
 | | Published `resnet1d_wang` (Strodthoff et al., 2021) | 1 | 0.930 | |
-| 3 | **Centralized** (random crops, cosine LR) | 1 | **0.916** | |
-| 3 | Centralized, full-length records, constant LR | 1 | 0.909 | −0.007 |
-| 3 | Centralized, tuned (wider, augmented, 3 seeds) | 1 | 0.922 | +0.006 |
-| 4 | FedAvg, IID | 5 | 0.908 | −0.007 |
-| 4 | FedAvg, IID | 10 | 0.899 | −0.016 |
-| 4 | FedAvg, IID | 20 | 0.892 | −0.024 |
-| 5 | FedAvg, by recording site | 4 | 0.911 | −0.004 |
-| 5 | FedAvg, by device | 8 | 0.908 | −0.007 |
-| 5 | FedAvg, Dirichlet label skew (alpha 0.3) | 10 | 0.889 | −0.026 |
-| 5 | FedProx (mu 0.01), by site / device / label skew | 4 / 8 / 10 | 0.908 / 0.906 / 0.888 | −0.008 / −0.009 / −0.028 |
-| 6 | Centralized, DP recipe without privacy | 1 | 0.898 | −0.018 |
-| 6 | Centralized, DP-SGD, ε = 8 / 3 / 1 | 1 | 0.874 / 0.863 / 0.832 | −0.042 / −0.053 / −0.084 |
-| 6 | FedAvg IID, DP recipe without privacy | 5 | 0.867 | −0.049 |
-| 6 | FedAvg IID, DP-SGD per hospital, ε = 8 / 3 / 1 | 5 | 0.840 / 0.821 / 0.755 | −0.076 / −0.095 / −0.160 |
+| 3 | **Centralized** (64 channels, crops, augmentation, cosine LR) | 1 | **0.917** | |
+| 3 | Centralized, ensemble of 3 seeds | 1 | 0.922 | +0.005 |
+| 3 | Centralized, before tuning (32 channels, crops only) | 1 | 0.916 | −0.001 |
+| 3 | Centralized, first recipe (full-length records, constant LR) | 1 | 0.909 | −0.008 |
+| 4 | FedAvg, IID | 5 | 0.910 | −0.007 |
+| 4 | FedAvg, IID | 10 | 0.901 | −0.016 |
+| 4 | FedAvg, IID | 20 | 0.891 | −0.026 |
+| 5 | FedAvg, by recording site | 4 | 0.913 | −0.004 |
+| 5 | FedAvg, by device | 8 | 0.911 | −0.006 |
+| 5 | FedAvg, Dirichlet label skew (alpha 0.3) | 10 | 0.884 | −0.032 |
+| 5 | FedProx (mu 0.01), by site / device / label skew | 4 / 8 / 10 | 0.909 / 0.908 / 0.881 | −0.007 / −0.009 / −0.036 |
+| 6 | Centralized, DP recipe without privacy | 1 | 0.898 | −0.019 |
+| 6 | Centralized, DP-SGD, ε = 8 / 3 / 1 | 1 | 0.874 / 0.863 / 0.832 | −0.043 / −0.054 / −0.085 |
+| 6 | FedAvg IID, DP recipe without privacy | 5 | 0.867 | −0.050 |
+| 6 | FedAvg IID, DP-SGD per hospital, ε = 8 / 3 / 1 | 5 | 0.840 / 0.821 / 0.755 | −0.077 / −0.096 / −0.161 |
 
-The tuned row is the winner of a validation-only study of training options
-(`results/tables/tuning.csv`), scored on test once. Every other row is still
-measured against the untuned baseline, so the phases stay comparable:
+The DP rows keep the 32-channel network and their own recipe (batches of
+1,024 centrally, 30 epochs or rounds), which costs AUROC even without noise;
+the privacy cost proper is each row's gap to its no-privacy control. δ = 10⁻⁵
+throughout.
 
-| Setting (validation fold only) | Val macro AUROC | vs. phase 3 recipe |
+**How the baseline was tuned.** A validation-only study of training options
+(`scripts/tune.py`, `results/tables/tuning.csv`), each against the recipe
+before tuning:
+
+| Setting (validation fold only) | Val macro AUROC | vs. before tuning |
 |---|---:|---:|
-| Phase 3 recipe | 0.920 | |
+| Before tuning (32 channels, crops only) | 0.920 | |
 | Focal loss | 0.920 | ±0.000 |
 | Class-weighted loss | 0.922 | +0.001 |
 | More augmentation (gain, noise, wander, lead dropout) | 0.922 | +0.002 |
@@ -272,13 +284,11 @@ measured against the untuned baseline, so the phases stay comparable:
 | Ensemble of 3 seeds | 0.925 | +0.005 |
 | **Wider + augmentation, ensemble of 3** | **0.928** | **+0.007** |
 
-Single models vary by about ±0.002 between seeds on validation, so the loss
-changes and each option on its own are within noise; capacity, augmentation
-and averaging only pay off together.
-
-The DP rows use their own recipe (batches of 1,024 centrally, 30 epochs or
-rounds), which costs AUROC even without noise; the privacy cost proper is each
-row's gap to its no-privacy control. δ = 10⁻⁵ throughout.
+Wider + augmentation became the baseline; the ensemble is reported
+separately because it applies to any setting at three times the cost, and the
+phases compare single models. On test the single-model gain shrank to +0.002
+on average over three seeds (0.918 against 0.916): picking the best of eight
+settings on one fold flatters the winner. Averaging seeds held up (+0.005).
 
 Where the baseline looks (Grad-CAM enrichment: share of attention in a beat
 segment divided by the share of time it covers; 1 is chance), over 100
@@ -287,12 +297,13 @@ weights for comparison:
 
 | Class | QRS complex | ST segment | T wave | Reading |
 |---|---:|---:|---:|---|
-| MI | **2.91** | 0.49 | 0.37 | Q waves of old infarcts, not ST elevation |
-| HYP | 2.32 (random 2.03) | **1.55** (random 0.06) | 0.76 | QRS emphasis is the input's; ST "strain" attention is learned |
-| CD | **1.58** (random 0.76) | **1.96** (random 0.32) | 0.57 | learned QRS attention; part of the "ST" may be the widened QRS tail |
-| STTC | 1.04 | 1.85 (random 1.94) | 1.31 (random 1.27) | the expected segments, but so does the random network |
+| MI | **2.66** | 0.71 | 0.59 | Q waves of old infarcts, not ST elevation (random-weight maps are empty) |
+| HYP | **1.70** (random 0.37) | 1.31 (random 0.70) | 0.97 | learned attention to QRS voltage, some to the ST segment |
+| CD | **2.24** (random 0.49) | **2.80** (random 0.07) | 0.53 | learned; part of the "ST" may be the widened QRS tail |
+| STTC | 0.94 | 1.62 (random 1.85) | **1.63** (random 1.35) | T-wave attention above the random network's |
 
-What the numbers say, phase by phase, is in the notebooks: decentralization
+What the numbers say, phase by phase, is in the notebooks: the baseline
+([02](notebooks/02_centralized_baseline.ipynb)), decentralization
 ([03](notebooks/03_federated_iid.ipynb)), heterogeneity
 ([04](notebooks/04_federated_non_iid.ipynb)), privacy
 ([05](notebooks/05_differential_privacy.ipynb)) and trust
@@ -348,6 +359,13 @@ validation AUROC, and validation and test stay on the server, unsplit.
 be computed exactly from each hospital's sums, sums of squares and counts, so
 the federated runs use the same pooled statistics as the baseline without any
 record leaving a hospital.
+
+**The baseline is tuned, the DP network is not.** The phase 3 recipe carries
+the winner of a validation-only tuning study (64 channels, extra augmentation),
+and phases 4, 5 and 7 inherit it. Phase 6 keeps the 32-channel network its
+DP recipe was tuned for: per-record gradients of the wider model at batch
+1,024 do not fit a laptop's memory, and DP noise, added in every parameter's
+direction, tends to hurt wider networks more.
 
 **Privacy is measured against a matched control.** DP-SGD needs its own
 recipe (large batches, a higher learning rate, 30 epochs), which also changes

@@ -23,7 +23,8 @@ export function ticksOf([lo, hi]: [number, number], step = 0.01): number[] {
 export const fmtAuroc = (v: number) => v.toFixed(3);
 
 export const fmtDelta = (v: number) => {
-  const r = Math.round(v * 1000) / 1000;
+  // Round half away from zero (Math.round alone rounds -0.0155 to -0.015).
+  const r = (Math.sign(v) * Math.round(Math.abs(v) * 1000)) / 1000;
   if (r === 0) return "±0.000";
   return `${r > 0 ? "+" : "−"}${Math.abs(r).toFixed(3)}`;
 };

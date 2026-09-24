@@ -6,7 +6,7 @@ import { deriveResults, NextPage, NotRunYet, PageHead, RunsTable, runCount } fro
 const CLASSES: Superclass[] = ["NORM", "MI", "STTC", "CD", "HYP"];
 const TITLE = "Centralised baseline";
 const LEDE =
-  "A 1D ResNet trained on all eight training folds at once, on random 2.5-second crops with a cosine learning-rate schedule. Every other result is measured against it.";
+  "A 1D ResNet (64 base channels, 1.6 million parameters) trained on all eight training folds at once, on random 2.5-second crops with gain, noise, baseline-drift and lead-dropout augmentation and a cosine learning-rate schedule. Every other result is measured against it.";
 
 export function Baseline({ data }: { data: AppData }) {
   const results = deriveResults(data);
@@ -91,7 +91,10 @@ export function Baseline({ data }: { data: AppData }) {
       <section aria-labelledby="runs-title">
         <div className="section-head">
           <h2 id="runs-title">Runs</h2>
-          <p>The plain recipe (full-length records, constant learning rate) is rerun, not quoted, so both rows come from the same code and test records.</p>
+          <p>
+            Earlier recipes are rerun, not quoted, so every row comes from the same code and test records. The
+            ensemble averages three seeds of the baseline; the other phases compare single models.
+          </p>
         </div>
         <RunsTable rows={phase3} results={results} />
       </section>

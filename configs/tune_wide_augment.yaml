@@ -1,6 +1,6 @@
 # Baseline tuning: the wider network with the extra augmentation.
 
-extends: centralized.yaml
+extends: tune_base.yaml
 
 experiment: {setting: "Wider network + augmentation"}
 

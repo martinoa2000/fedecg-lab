@@ -54,18 +54,19 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 # ------------------------------------------------------------------ options
 
 OPTIONS: dict[str, dict[str, Any]] = {
-    "base_channels": {"type": "choice", "values": [16, 32, 64, 96], "default": 32},
+    "base_channels": {"type": "choice", "values": [16, 32, 64, 96], "default": 64},
     "crop_samples": {"type": "choice", "values": [None, 250, 500], "default": 250},
     "epochs": {"type": "int", "min": 1, "max": 100, "default": 50},
     "learning_rate": {"type": "choice", "values": [0.0003, 0.001, 0.003], "default": 0.001},
     "loss": {"type": "choice", "values": ["bce", "weighted_bce", "focal"], "default": "bce"},
     "seeds": {"type": "int", "min": 1, "max": 5, "default": 1},
-    "amplitude": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.0},
-    "noise": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.0},
-    "wander": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.0},
-    "lead_dropout": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.0},
+    "amplitude": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.1},
+    "noise": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.05},
+    "wander": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.1},
+    "lead_dropout": {"type": "float", "min": 0.0, "max": 0.5, "default": 0.1},
 }
-"""Every option the Train page may set, with its allowed values."""
+"""Every option the Train page may set, with its allowed values. Defaults are
+the phase 3 recipe in configs/centralized.yaml."""
 
 
 def validate_options(raw: Any) -> dict[str, Any]:
@@ -275,9 +276,12 @@ class Trainer:
                 self.queue.remove(run_id)
                 run.status = "stopped"
                 run.finished = time.time()
-            elif run.status == "running" and self.process is not None:
+            elif run.status == "running":
                 run.status = "stopping"
-                self.process.terminate()
+                # The process may not exist yet; _execute checks the status
+                # right after starting it.
+                if self.process is not None:
+                    self.process.terminate()
         return run
 
     # -- worker
@@ -308,6 +312,8 @@ class Trainer:
             )
             with self.lock:
                 self.process, self.current = process, run.id
+                if run.status == "stopping":
+                    process.terminate()
             assert process.stdout is not None
             for line in process.stdout:
                 log.write(line)

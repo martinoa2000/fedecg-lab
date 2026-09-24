@@ -281,7 +281,7 @@ class TestReproduce:
                     for (var, _), value in zip(stack, combo, strict=True):
                         name = re.sub(rf"\$\{{?{var}\}}?", value, name)
                     names.add(name)
-        assert len(names) == 28  # phases 3-6: 2 + 3 + 6 + 8; tuning: 8 + 1
+        assert len(names) == 29  # phase 3: 4, tuning: 8, phases 4-6: 3 + 6 + 8
         missing = sorted(n for n in names if not (PROJECT_ROOT / "configs" / n).is_file())
         assert missing == []
 
@@ -302,7 +302,7 @@ class TestTune:
             "data: {subsample: null}\n"
             "model: {base_channels: 8, blocks_per_stage: [1], norm_groups: 4}\n"
             "training: {epochs: 1, batch_size: 4, device: cpu, loss: focal, ensemble_seeds: [1, 2],"
-            " augment: {noise: 0.05}}\n"
+            " augment: {amplitude: 0.0, noise: 0.05, wander: 0.0, lead_dropout: 0.0}}\n"
             "experiment: {setting: Tiny try}\n"
         )
         tables = tmp_path / "tables"

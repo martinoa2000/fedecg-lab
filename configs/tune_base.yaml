@@ -1,0 +1,12 @@
+# The phase 3 recipe as it stood before the tuning study: 32 base channels
+# and no augmentation beyond random crops. Every tune_*.yaml extends this
+# file, so the study keeps measuring the same thing after centralized.yaml
+# adopted its winner.
+
+extends: centralized.yaml
+
+model:
+  base_channels: 32
+
+training:
+  augment: {amplitude: 0.0, noise: 0.0, wander: 0.0, lead_dropout: 0.0}

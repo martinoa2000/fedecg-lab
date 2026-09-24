@@ -1,9 +1,19 @@
 # Phase 3: the centralized baseline.
 #
-# Identical to the base config on purpose. Every later phase (federated, DP)
-# extends this file, so its numbers are the reference the others are measured
-# against.
+# Every later phase (federated, DP) extends this file, so its numbers are the
+# reference the others are measured against. On top of the shared recipe in
+# default.yaml it carries the winner of the validation-only tuning study
+# (configs/tune_*.yaml, results/tables/tuning.csv): a network twice as wide
+# and augmentation beyond random crops. The study's other winner, averaging
+# three seeds, is `centralized_ensemble.yaml`: it applies to any setting at
+# three times the cost, so the phases compare single models.
 
 extends: default.yaml
 
 experiment: {phase: 3, setting: "Centralized"}
+
+model:
+  base_channels: 64
+
+training:
+  augment: {amplitude: 0.1, noise: 0.05, wander: 0.1, lead_dropout: 0.1}

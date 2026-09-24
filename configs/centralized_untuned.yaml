@@ -1,0 +1,6 @@
+# Phase 3 ablation: the baseline before the tuning study, 32 base channels
+# and no augmentation beyond random crops (the recipe phases 4-7 first used).
+
+extends: tune_base.yaml
+
+experiment: {phase: 3, setting: "Centralized, before tuning (32 channels, crops only)"}
