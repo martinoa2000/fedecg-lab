@@ -4,17 +4,18 @@ import { aurocDomain, CurveChart, DotPlot, fmtAuroc, fmtDelta, type Series } fro
 import { formatInt, type AppData, type TuningRow } from "../../data";
 import { PageHead } from "./model";
 
+/** The phase 3 recipe (configs/centralized.yaml): the form starts from it. */
 const DEFAULTS: TrainOptions = {
-  base_channels: 32,
+  base_channels: 64,
   crop_samples: 250,
   epochs: 50,
   learning_rate: 0.001,
   loss: "bce",
   seeds: 1,
-  amplitude: 0,
-  noise: 0,
-  wander: 0,
-  lead_dropout: 0,
+  amplitude: 0.1,
+  noise: 0.05,
+  wander: 0.1,
+  lead_dropout: 0.1,
 };
 
 const AUGMENT: { key: "amplitude" | "noise" | "wander" | "lead_dropout"; label: string; hint: string }[] = [
@@ -39,6 +40,8 @@ const active = (r: Run) => r.status === "queued" || r.status === "running" || r.
 
 function TuningStudy({ rows }: { rows: TuningRow[] }) {
   const reference = rows.find((r) => r.run === "tune_baseline");
+  // The study's rows are named after its configs; anything else was started
+  // from this page and is listed with them.
   const sorted = [...rows].sort((a, b) => b.val_macro_auroc - a.val_macro_auroc);
   const domain = aurocDomain(rows.map((r) => r.val_macro_auroc), 0.005);
   return (
@@ -47,7 +50,7 @@ function TuningStudy({ rows }: { rows: TuningRow[] }) {
         ariaLabel="Validation macro AUROC per training setting"
         domain={domain}
         tickStep={0.005}
-        references={reference ? [{ key: "ref", value: reference.val_macro_auroc, label: "Phase 3 recipe" }] : []}
+        references={reference ? [{ key: "ref", value: reference.val_macro_auroc, label: "Before tuning" }] : []}
         rows={sorted.map((r) => ({
           key: r.run,
           label: r.setting,

@@ -1,6 +1,6 @@
 # Baseline tuning: focal loss (gamma 2) instead of plain binary cross-entropy.
 
-extends: centralized.yaml
+extends: tune_base.yaml
 
 experiment: {setting: "Focal loss"}
 

@@ -1,6 +1,6 @@
 # Baseline tuning: the phase 3 recipe unchanged, scored on validation only.
 # The reference every other tune_*.yaml is compared with.
 
-extends: centralized.yaml
+extends: tune_base.yaml
 
 experiment: {setting: "Phase 3 recipe"}

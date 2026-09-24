@@ -26,17 +26,16 @@ if wants 2; then
 fi
 
 if wants 3; then
-  for config in centralized centralized_plain; do
+  for config in centralized centralized_untuned centralized_plain centralized_ensemble; do
     run scripts/train_centralized.py --config "$config.yaml"
   done
 fi
 
 if wants tune; then
-  # Validation-only study of training options, then the winner scored once.
+  # Validation-only study of training options; its winner is centralized.yaml.
   for config in tune_baseline tune_wide tune_augment tune_weighted tune_focal tune_ensemble tune_wide_augment tune_best; do
     run scripts/tune.py --config "$config.yaml"
   done
-  run scripts/train_centralized.py --config "centralized_tuned.yaml"
 fi
 
 if wants 4; then

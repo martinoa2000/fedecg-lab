@@ -1,11 +1,16 @@
-# Phase 3 ablation: the first baseline recipe, before random crops and the
-# cosine schedule. Kept so the gain from those two changes is measured on the
-# same test fold rather than quoted from an older run.
+# Phase 3 ablation: the first baseline recipe, before random crops, the
+# cosine schedule, and the tuned width and augmentation. Kept so the gain
+# from those changes is measured on the same test fold rather than quoted
+# from an older run.
 
 extends: centralized.yaml
 
-experiment: {phase: 3, setting: "Centralized, full-length, constant LR"}
+experiment: {phase: 3, setting: "Centralized, first recipe (full-length, constant LR)"}
+
+model:
+  base_channels: 32
 
 training:
   lr_schedule: constant
   crop_samples: null
+  augment: {amplitude: 0.0, noise: 0.0, wander: 0.0, lead_dropout: 0.0}

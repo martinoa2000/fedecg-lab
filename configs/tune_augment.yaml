@@ -1,6 +1,6 @@
 # Baseline tuning: gain, noise, baseline wander and lead dropout on top of crops.
 
-extends: centralized.yaml
+extends: tune_base.yaml
 
 experiment: {setting: "More augmentation"}
 

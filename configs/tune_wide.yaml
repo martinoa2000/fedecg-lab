@@ -1,6 +1,6 @@
 # Baseline tuning: twice the channels at every stage (about 4x the parameters).
 
-extends: centralized.yaml
+extends: tune_base.yaml
 
 experiment: {setting: "Wider network (64 base channels)"}
 

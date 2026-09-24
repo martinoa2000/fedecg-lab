@@ -1,0 +1,10 @@
+# Phase 3: the baseline averaged over three seeds, the tuning study's best
+# setting (validation macro AUROC 0.928). Three times the training compute;
+# the other phases compare single models against `centralized.yaml`.
+
+extends: centralized.yaml
+
+experiment: {phase: 3, setting: "Centralized, ensemble of 3 seeds"}
+
+training:
+  ensemble_seeds: [42, 43, 44]

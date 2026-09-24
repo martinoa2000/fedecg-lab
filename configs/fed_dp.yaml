@@ -9,12 +9,21 @@
 extends: fedavg_iid_5.yaml
 
 training:
+  augment: {amplitude: 0.0, noise: 0.0, wander: 0.0, lead_dropout: 0.0}
   batch_size: 256
   epochs: 30
   learning_rate: 0.01
 
 federated:
   rounds: 30
+
+# DP-SGD keeps the network it was tuned with. Per-record gradients of the
+# tuned 64-channel model at batch 1,024 need ~15 GB (hours per epoch on a
+# laptop), and noise is added in every parameter's direction, so wider
+# networks tend to fare worse under DP. Each DP run is measured against a
+# no-privacy control with this same network.
+model:
+  base_channels: 32
 
 privacy:
   enabled: true

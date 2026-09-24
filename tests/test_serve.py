@@ -50,7 +50,9 @@ class TestOptions:
     def test_defaults_fill_every_option(self):
         options = serve.validate_options({})
         assert set(options) == set(serve.OPTIONS)
-        assert options["base_channels"] == 32 and options["loss"] == "bce"
+        # The phase 3 recipe in configs/centralized.yaml.
+        assert options["base_channels"] == 64 and options["loss"] == "bce"
+        assert options["noise"] == 0.05
 
     @pytest.mark.parametrize(
         "bad",
