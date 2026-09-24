@@ -138,6 +138,15 @@ function Shell({ data }: { data: AppData }) {
       </header>
       <main className="main">
         <View data={data} />
+        <footer className="site-footer">
+          <p>
+            ECG data: PTB-XL (Wagner et al., 2020), version 1.0.3 on{" "}
+            <a href="https://physionet.org/content/ptb-xl/1.0.3/">PhysioNet</a>, licensed under{" "}
+            <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>; recordings shown here are
+            band-pass filtered and annotated. Research code, not a medical device.{" "}
+            <a href="https://github.com/martinoa2000/fedecg-lab">Source on GitHub</a>.
+          </p>
+        </footer>
       </main>
     </div>
   );

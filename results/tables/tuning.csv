@@ -1,5 +1,5 @@
 run,setting,base_channels,n_parameters,crop_samples,augment,loss,seeds,val_macro_auroc,val_auroc_NORM,val_auroc_MI,val_auroc_STTC,val_auroc_CD,val_auroc_HYP,member_val_macro_auroc,best_epoch,seconds
-tune_baseline,Phase 3 recipe,32,395333,250,none,bce,1,0.9204,0.9421,0.9281,0.9319,0.9385,0.8615,0.9204,26.0,100.7
+tune_baseline,"Before tuning (32 channels, crops only)",32,395333,250,none,bce,1,0.9204,0.9421,0.9281,0.9319,0.9385,0.8615,0.9204,26.0,100.7
 tune_wide,Wider network (64 base channels),64,1568901,250,none,bce,1,0.9223,0.939,0.9345,0.9328,0.9407,0.8645,0.9223,26.0,229.7
 tune_augment,More augmentation,32,395333,250,"amplitude 0.1, noise 0.05, wander 0.1, lead_dropout 0.1",bce,1,0.9221,0.9432,0.9312,0.9337,0.9411,0.8613,0.9221,39.0,255.3
 tune_weighted,Class-weighted loss,32,395333,250,none,weighted_bce,1,0.9217,0.9394,0.9263,0.9336,0.9418,0.8676,0.9217,25.0,93.6

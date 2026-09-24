@@ -16,6 +16,8 @@ each step.
 > **Not a medical device.** Research and educational code only. See
 > [Limitations](#limitations).
 
+![The dashboard's overview: a 12-lead ECG labelled myocardial infarction, and the four questions the project answers](docs/images/dashboard-overview.png)
+
 ## Findings
 
 Test macro AUROC on PTB-XL's official test fold. The centralized baseline, a
@@ -41,6 +43,8 @@ seeds of it reaches **0.922** (published `resnet1d_wang`: 0.930).
 
 All findings were measured twice, before and after the baseline was tuned,
 and each held; the numbers here are from the tuned baseline.
+
+![Test macro AUROC of every run against the centralized baseline and the published result](docs/images/dashboard-results.png)
 
 ## The question
 
@@ -71,8 +75,11 @@ the 100 Hz version so everything runs on a laptop.
   this split is what makes the numbers here comparable to published baselines.
 - **Primary metric:** macro AUROC, with per-class F1 reported alongside.
 
-The data is **never committed**. `scripts/download_data.py` fetches it from
-PhysioNet and verifies every file against the official `SHA256SUMS.txt`.
+The raw data is **never committed**. `scripts/download_data.py` fetches it
+from PhysioNet and verifies every file against the official `SHA256SUMS.txt`.
+PTB-XL is released under the [Creative Commons Attribution 4.0
+License](https://creativecommons.org/licenses/by/4.0/); if you use it, cite
+the dataset, its paper and PhysioNet (see [Data and attribution](#data-and-attribution)).
 
 ## How it works
 
@@ -219,7 +226,20 @@ npm --prefix app run dev
 ```
 
 Then open http://localhost:5173. The export writes to `app/public/data/`, which is
-git-ignored because it contains PTB-XL waveforms.
+git-ignored because it contains PTB-XL waveforms. One page per experiment:
+
+| Federated learning | Differential privacy |
+|---|---|
+| ![AUROC by number of hospitals and validation curves per round](docs/images/dashboard-federated.png) | ![AUROC against privacy budget epsilon, centralized and federated](docs/images/dashboard-privacy.png) |
+| **Where the model looks** | **Tuning and training** |
+| ![An infarction ECG with its attribution, and Grad-CAM attention per beat segment](docs/images/dashboard-explainability.png) | ![The validation-only tuning study](docs/images/dashboard-train.png) |
+
+To publish a static copy to GitHub Pages (the Train page then explains how to
+train locally, since there is no server behind it):
+
+```bash
+scripts/publish_dashboard.sh    # then, once: Settings > Pages > branch gh-pages
+```
 
 Enable the git hooks (lint, formatting, notebook output stripping):
 
@@ -416,7 +436,9 @@ fast smoke runs, and CI never trains anything.
 
 ## References
 
-- Wagner et al. (2020). *PTB-XL, a large publicly available electrocardiography dataset.* Scientific Data 7, 154.
+- Wagner, P., Strodthoff, N., Bousseljot, R., Samek, W., & Schaeffter, T. (2022). *PTB-XL, a large publicly available electrocardiography dataset* (version 1.0.3). PhysioNet. https://doi.org/10.13026/kfzx-aw45
+- Wagner et al. (2020). *PTB-XL, a large publicly available electrocardiography dataset.* Scientific Data 7, 154. https://doi.org/10.1038/s41597-020-0495-6
+- Goldberger, A., et al. (2000). *PhysioBank, PhysioToolkit, and PhysioNet: Components of a new research resource for complex physiologic signals.* Circulation 101(23), e215–e220.
 - Strodthoff et al. (2021). *Deep Learning for ECG Analysis: Benchmarks and Insights from PTB-XL.* IEEE JBHI 25(5).
 - McMahan et al. (2017). *Communication-Efficient Learning of Deep Networks from Decentralized Data.* AISTATS.
 - Li et al. (2020). *Federated Optimization in Heterogeneous Networks (FedProx).* MLSys.
@@ -427,7 +449,23 @@ fast smoke runs, and CI never trains anything.
 - Adebayo et al. (2018). *Sanity Checks for Saliency Maps.* NeurIPS.
 - Sturmfels et al. (2020). *Visualizing the Impact of Feature Attribution Baselines.* Distill.
 
+## Data and attribution
+
+This project uses PTB-XL (Wagner et al., 2020; version 1.0.3 on PhysioNet,
+Goldberger et al., 2000), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+- The raw recordings are not in this repository; `scripts/download_data.py`
+  fetches them from PhysioNet.
+- `results/` contains material derived from PTB-XL: label statistics, metric
+  tables, and figures that plot a handful of recordings (`class_examples.png`,
+  `preprocessing.png`, `saliency_*.png`). The dashboard export, which is not
+  committed, contains a few dozen recordings as well. These are shared under
+  the dataset's CC BY 4.0 terms, with attribution to the PTB-XL authors and
+  PhysioNet, and were changed from the originals by band-pass filtering,
+  standardization and annotation.
+
 ## License
 
-MIT for the code in this repository. PTB-XL is distributed by PhysioNet under
-its own license and is not redistributed here.
+MIT for the code in this repository (see [LICENSE](LICENSE)). The PTB-XL data
+and the derived material described above remain under CC BY 4.0.

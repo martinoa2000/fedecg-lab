@@ -1,0 +1,78 @@
+cff-version: 1.2.0
+message: >-
+  If you use this code or its results, please cite it as below, and cite the
+  PTB-XL dataset and PhysioNet as listed under references.
+title: "fedecg-lab: what it costs to learn from ECGs that never leave the hospital"
+abstract: >-
+  Multi-label classification of 12-lead ECGs (PTB-XL) used to measure, side by
+  side, the cost of federated training across simulated hospitals, of
+  heterogeneous hospitals, and of differential privacy, with saliency analysis
+  checked against a model-randomization test.
+type: software
+authors:
+  - given-names: Martin
+    alias: martinoa2000
+repository-code: "https://github.com/martinoa2000/fedecg-lab"
+license: MIT
+version: 1.0.0
+date-released: "2026-09-24"
+keywords:
+  - ecg
+  - federated learning
+  - differential privacy
+  - explainability
+  - ptb-xl
+references:
+  - type: data
+    title: "PTB-XL, a large publicly available electrocardiography dataset (version 1.0.3)"
+    authors:
+      - family-names: Wagner
+        given-names: Patrick
+      - family-names: Strodthoff
+        given-names: Nils
+      - family-names: Bousseljot
+        given-names: Ralf-Dieter
+      - family-names: Samek
+        given-names: Wojciech
+      - family-names: Schaeffter
+        given-names: Tobias
+    publisher:
+      name: PhysioNet
+    doi: 10.13026/kfzx-aw45
+    year: 2022
+    license: CC-BY-4.0
+  - type: article
+    title: "PTB-XL, a large publicly available electrocardiography dataset"
+    authors:
+      - family-names: Wagner
+        given-names: Patrick
+      - family-names: Strodthoff
+        given-names: Nils
+      - family-names: Bousseljot
+        given-names: Ralf-Dieter
+      - family-names: Kreiseler
+        given-names: Dieter
+      - family-names: Lunze
+        given-names: Fatima I.
+      - family-names: Samek
+        given-names: Wojciech
+      - family-names: Schaeffter
+        given-names: Tobias
+    journal: Scientific Data
+    volume: 7
+    start: 154
+    year: 2020
+    doi: 10.1038/s41597-020-0495-6
+  - type: article
+    title: "PhysioBank, PhysioToolkit, and PhysioNet: Components of a new research resource for complex physiologic signals"
+    authors:
+      - family-names: Goldberger
+        given-names: Ary L.
+      - name: et al.
+    journal: Circulation
+    volume: 101
+    issue: 23
+    start: e215
+    end: e220
+    year: 2000
+    doi: 10.1161/01.CIR.101.23.e215

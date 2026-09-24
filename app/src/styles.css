@@ -2029,3 +2029,23 @@ fieldset.augment {
     grid-column: 1 / -1;
   }
 }
+
+/* ---------------------------------------------------------- footer */
+
+.site-footer {
+  max-width: 1180px;
+  margin-top: 72px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hairline);
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.site-footer p {
+  max-width: 80ch;
+}
+
+.site-footer a {
+  color: var(--ink-2);
+  text-underline-offset: 3px;
+}
