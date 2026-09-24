@@ -10,6 +10,9 @@ Pipeline:
 4. Keep the global model from the round with the best validation macro AUROC.
 5. Tune per-class thresholds on validation, then evaluate test once.
 
+With `privacy.enabled`, every hospital trains with DP-SGD (roadmap phase 6)
+and the largest epsilon spent by any hospital is recorded.
+
 Validation and test never leave the server and are never split: every model
 in every phase is selected and scored on the same two folds.
 
@@ -51,6 +54,7 @@ from fedecg.federated.simulation import (
 from fedecg.federated.strategy import build_strategy
 from fedecg.models.resnet1d import build_model, count_parameters
 from fedecg.paths import CACHE_DIR, CHECKPOINT_DIR, PTBXL_DIR, TABLES_DIR, ensure_dir
+from fedecg.privacy.dp_sgd import private_training_from_config
 from fedecg.seed import new_generator, set_seed
 from fedecg.training.evaluate import final_evaluation
 from fedecg.training.loop import (
@@ -115,6 +119,21 @@ def main(argv: list[str] | None = None) -> int:
         prob, true = predict_from_config(m, val_loader, device, train_cfg)
         return bce_from_probs(true, prob), macro_auroc(true, prob)
 
+    rounds = int(fed_cfg.get("rounds", train_cfg["epochs"]))
+    local_epochs = int(fed_cfg.get("local_epochs", 1))
+
+    # DP-SGD inside every hospital (phase 6): each one calibrates its own noise
+    # so that all its rounds together spend at most the target epsilon.
+    privates = [
+        private_training_from_config(config, n_records=len(idx), epochs=rounds * local_epochs)
+        for idx in partition.clients
+    ]
+    if privates[0] is not None:
+        print(
+            f"DP-SGD per hospital: target epsilon {privates[0].target_epsilon}, noise multipliers "
+            + ", ".join(f"{p.noise_multiplier:.2f}" for p in privates)
+        )
+
     # Each client's seed is derived from the experiment seed and its index, so
     # adding a hospital never changes the batch order of the others.
     clients = [
@@ -127,12 +146,12 @@ def main(argv: list[str] | None = None) -> int:
                 device,
                 train_cfg,
                 seed=seed * 1000 + i,
+                private=privates[i],
             ).to_client(),
         )
         for i, idx in enumerate(partition.clients)
     ]
 
-    rounds = int(fed_cfg.get("rounds", train_cfg["epochs"]))
     base_lr = float(train_cfg["learning_rate"])
     schedule = train_cfg.get("lr_schedule", "constant")
     warmup = float(train_cfg.get("warmup_fraction", 0.0))
@@ -142,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
         progress = (server_round - 0.5) / rounds
         return {
             "learning_rate": base_lr * lr_factor(progress, schedule, warmup),
-            "local_epochs": int(fed_cfg.get("local_epochs", 1)),
+            "local_epochs": local_epochs,
         }
 
     strategy = build_strategy(
@@ -176,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
             progress=True,
         )
         print(f"best round {result.best_round}: val macro AUROC {result.best_score:.4f}")
+        # The guarantee holds per hospital; report the weakest one.
+        epsilon = max(p.epsilon() for p in privates) if privates[0] is not None else None
+        if epsilon is not None:
+            print(f"epsilon spent (largest over hospitals): {epsilon:.3f}")
 
         table, thresholds = final_evaluation(model, val_loader, test_loader, device, train_cfg)
         print(table.round(4).to_string())
@@ -209,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
                 "test_macro_auroc": table.loc["macro", "auroc"],
                 "test_macro_f1": table.loc["macro", "f1"],
                 "communication_mb": result.communication_mb,
+                **({"epsilon": epsilon} if epsilon is not None else {}),
             }
         )
         for path in paths.values():
@@ -225,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
             best_step=result.best_round,
             steps_run=len(result.history),
             communication_mb=round(result.communication_mb, 1),
+            epsilon=None if epsilon is None else round(epsilon, 3),
             seconds=round(time.perf_counter() - started, 1),
         ),
         args.experiments or tables / "experiments.csv",

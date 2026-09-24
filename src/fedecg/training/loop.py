@@ -279,6 +279,12 @@ class FitResult:
 
 EpochCallback = Callable[[dict[str, float]], None]
 
+WrapFn = Callable[
+    [nn.Module, torch.optim.Optimizer, DataLoader],
+    tuple[nn.Module, torch.optim.Optimizer, DataLoader],
+]
+"""Replaces model, optimizer and loader before training, e.g. with DP versions."""
+
 
 class EarlyStopping:
     """Track the best validation score and say when patience has run out.
@@ -320,6 +326,7 @@ def fit(
     *,
     on_epoch: EpochCallback | None = None,
     progress: bool = False,
+    wrap: WrapFn | None = None,
 ) -> FitResult:
     """Train with AdamW and stop when validation macro AUROC stops improving.
 
@@ -335,6 +342,10 @@ def fit(
         device: Where `model` lives.
         on_epoch: Called with each epoch's metrics dict, e.g. to log to MLflow.
         progress: Print one line per epoch.
+        wrap: Applied to the model, optimizer and training loader before the
+            first epoch (see `fedecg.privacy.PrivateTraining.wrap`). The
+            wrapped model must share parameters with `model`, which is still
+            the one evaluated and returned.
 
     Returns:
         A `FitResult`. On return, `model` holds the weights of the best epoch,
@@ -352,6 +363,9 @@ def fit(
         lr=float(training_config["learning_rate"]),
         weight_decay=float(training_config.get("weight_decay", 0.0)),
     )
+    trained = model
+    if wrap is not None:
+        trained, optimizer, train_loader = wrap(model, optimizer, train_loader)
     schedule = training_config.get("lr_schedule", "constant")
     warmup = float(training_config.get("warmup_fraction", 0.0))
     total_steps = max(epochs * len(train_loader), 1)
@@ -364,7 +378,7 @@ def fit(
         start = time.perf_counter()
         lr = optimizer.param_groups[0]["lr"]
         train_loss = train_one_epoch(
-            model, train_loader, optimizer, loss_fn, device, scheduler=scheduler
+            trained, train_loader, optimizer, loss_fn, device, scheduler=scheduler
         )
         val_prob, val_true = predict_from_config(model, val_loader, device, training_config)
         score = macro_auroc(val_true, val_prob)

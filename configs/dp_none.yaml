@@ -1,0 +1,10 @@
+# Phase 6 control: the DP recipe (batch 1,024, learning rate 0.03, 30 epochs)
+# without clipping or noise. The gap between this and the DP runs is the cost
+# of privacy alone.
+
+extends: dp.yaml
+
+experiment: {phase: 6, setting: "Centralized, DP recipe, no privacy"}
+
+privacy:
+  enabled: false

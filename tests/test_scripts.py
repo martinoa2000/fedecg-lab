@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 import torch
@@ -63,6 +64,7 @@ class TestExportDashboard:
             "dataset.json",
             "signals.json",
             "experiments.json",
+            "explain.json",
         }
 
     def test_experiments_carry_curves_and_client_mixes(self, fake_ptbxl, tmp_path):
@@ -93,6 +95,44 @@ class TestExportDashboard:
             "fed": [{"client": "site 0", "n_records": 10, "NORM": 50.0}]
         }
         assert experiments["published"][0]["macro_auroc"] == 0.93
+
+    def test_explain_carries_tables_and_example_maps(self, fake_ptbxl, tmp_path):
+        script = load_script("export_dashboard")
+        tables = tmp_path / "tables"
+        tables.mkdir()
+        pd.DataFrame(
+            [{"superclass": "MI", "method": "grad_cam", "segment": "st", "enrichment": 0.5}]
+        ).to_csv(tables / "saliency_segments.csv", index=False)
+        masks = {s: np.zeros(1000, dtype=bool) for s in ("qrs", "st", "t", "other")}
+        masks["st"][100:120] = True
+        np.savez(
+            tmp_path / "examples.npz",
+            fs=100,
+            leads=np.array(["I", "II"]),
+            MI_signal=np.full((2, 1000), 0.5, dtype=np.float32),
+            MI_ig=np.linspace(-1, 2, 2000, dtype=np.float32).reshape(2, 1000),
+            MI_probability=np.float32(0.9),
+            **{f"MI_{s}": m for s, m in masks.items()},
+        )
+        out = tmp_path / "out"
+
+        script.main(
+            [
+                "--root", str(fake_ptbxl),
+                "--out", str(out),
+                "--tables", str(tables),
+                "--saliency", str(tmp_path / "examples.npz"),
+            ]
+        )  # fmt: skip
+
+        explain = json.loads((out / "explain.json").read_text())
+        assert explain["segments"][0]["enrichment"] == 0.5
+        example = explain["examples"][0]
+        assert example["superclass"] == "MI"
+        assert example["signal"][0][0] == 500  # microvolts
+        assert max(max(lead) for lead in example["attribution"]) == 100
+        assert min(min(lead) for lead in example["attribution"]) >= 0
+        assert example["segments"]["st"] == [[100, 120]]
 
     def test_signals_are_integer_microvolts_per_lead(self, fake_ptbxl, tmp_path):
         script = load_script("export_dashboard")
@@ -186,3 +226,68 @@ class TestTrainFederated:
         assert summary.loc[0, "partition"] == partition
         state = torch.load(checkpoints / f"{name}.pt", weights_only=False)
         assert set(state) >= {"model_state", "thresholds", "best_round", "client_names"}
+
+
+class TestPrivateTraining:
+    @pytest.mark.parametrize("script_name", ["train_centralized", "train_federated"])
+    def test_records_the_epsilon_spent(self, fake_ptbxl, tmp_path, script_name):
+        script = load_script(script_name)
+        config = tmp_path / "tiny_dp.yaml"
+        base = "smoke_federated.yaml" if script_name == "train_federated" else "smoke.yaml"
+        config.write_text(
+            f"extends: {base}\n"
+            "data: {subsample: null}\n"
+            "model: {base_channels: 8, blocks_per_stage: [1], norm_groups: 4}\n"
+            "training: {epochs: 2, batch_size: 4, device: cpu}\n"
+            "federated: {n_clients: 2, rounds: 2}\n"
+            "privacy: {enabled: true, target_epsilon: 5.0}\n"
+            "experiment: {phase: 6, setting: tiny}\n"
+        )
+        tables = tmp_path / "tables"
+
+        exit_code = script.main(
+            [
+                "--config", str(config),
+                "--root", str(fake_ptbxl),
+                "--no-cache",
+                "--tables", str(tables),
+                "--checkpoints", str(tmp_path / "ckpt"),
+            ]
+        )  # fmt: skip
+
+        assert exit_code == 0
+        row = pd.read_csv(tables / "experiments.csv").iloc[0]
+        assert row["phase"] == 6
+        assert 0 < row["epsilon"] <= 5.0 * 1.05
+
+
+class TestReproduce:
+    def test_every_config_it_runs_exists(self):
+        """A renamed config must not silently break the full reproduction."""
+        import itertools
+        import re
+
+        # Walk the script with a stack of enclosing `for` loops, expanding each
+        # --config template over the loops it sits in.
+        names, stack = set(), []
+        for line in (PROJECT_ROOT / "scripts" / "reproduce.sh").read_text().splitlines():
+            if loop := re.search(r"for (\w+) in ([\w ]+); do", line):
+                stack.append((loop[1], loop[2].split()))
+            elif line.strip() == "done":
+                stack.pop()
+            elif template := re.search(r'--config "([^"]+)"', line):
+                for combo in itertools.product(*(values for _, values in stack)):
+                    name = template[1]
+                    for (var, _), value in zip(stack, combo, strict=True):
+                        name = re.sub(rf"\$\{{?{var}\}}?", value, name)
+                    names.add(name)
+        assert len(names) == 19  # phases 3-6: 2 + 3 + 6 + 8
+        missing = sorted(n for n in names if not (PROJECT_ROOT / "configs" / n).is_file())
+        assert missing == []
+
+    def test_every_script_it_runs_exists(self):
+        import re
+
+        script = (PROJECT_ROOT / "scripts" / "reproduce.sh").read_text()
+        for name in set(re.findall(r"run (scripts/\w+\.py)", script)):
+            assert (PROJECT_ROOT / name).is_file(), name

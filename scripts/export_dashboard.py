@@ -9,6 +9,8 @@ waveforms, which this repository does not redistribute):
     experiments.json  rows of `results/tables/experiments.csv`, each run's
                       training curve and, for federated runs, every hospital's
                       size and label mix
+    explain.json      saliency tables from `scripts/explain_model.py` and one
+                      example record per class with its attribution map
 
 Signals are stored as integer microvolts to keep the file small; the app
 divides by 1000 to get millivolts back.
@@ -47,7 +49,8 @@ from fedecg.data.stats import (
     label_distribution,
     records_by,
 )
-from fedecg.paths import PROJECT_ROOT, PTBXL_DIR, TABLES_DIR, ensure_dir
+from fedecg.explain.saliency import SEGMENTS
+from fedecg.paths import PROJECT_ROOT, PTBXL_DIR, RESULTS_DIR, TABLES_DIR, ensure_dir
 
 APP_DATA_DIR = PROJECT_ROOT / "app" / "public" / "data"
 
@@ -184,6 +187,58 @@ def experiment_results(tables: Path) -> dict:
     }
 
 
+def _spans(mask: np.ndarray) -> list[list[int]]:
+    """`[start, end)` sample ranges where a boolean mask is true."""
+    edges = np.diff(np.concatenate([[0], mask.astype(int), [0]]))
+    return [
+        [int(a), int(b)]
+        for a, b in zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1), strict=True)
+    ]
+
+
+def explain_results(tables: Path, examples_path: Path) -> dict:
+    """Saliency tables plus, if present, one example record per class.
+
+    Attribution is exported as |IG| per lead and sample, scaled to integers
+    0-100 by the record's 99.5th percentile (clipped above), so leads are
+    comparable within a record and the bulk of the map stays visible.
+    Signals are integer microvolts, as in signals.json.
+    """
+    out: dict = {"segments": [], "leads": [], "sanity": [], "examples": []}
+    for key, name in (
+        ("segments", "saliency_segments"),
+        ("leads", "saliency_leads"),
+        ("sanity", "saliency_sanity"),
+    ):
+        path = tables / f"{name}.csv"
+        if path.exists():
+            out[key] = json.loads(pd.read_csv(path).to_json(orient="records"))
+    if not examples_path.exists():
+        return out
+    with np.load(examples_path) as saved:
+        out["fs"] = int(saved["fs"])
+        out["lead_names"] = [str(lead) for lead in saved["leads"]]
+        for name in SUPERCLASSES:
+            if f"{name}_signal" not in saved:
+                continue
+            ig = np.abs(saved[f"{name}_ig"])
+            # A few samples carry most of the attribution; scaling by the
+            # 99.5th percentile (and clipping) keeps the rest visible.
+            scale = max(float(np.percentile(ig, 99.5)), 1e-12)
+            out["examples"].append(
+                {
+                    "superclass": name,
+                    "probability": round(float(saved[f"{name}_probability"]), 3),
+                    "signal": np.rint(saved[f"{name}_signal"] * 1000).astype(int).tolist(),
+                    "attribution": np.rint(np.clip(ig / scale, 0, 1) * 100).astype(int).tolist(),
+                    "segments": {
+                        seg: _spans(saved[f"{name}_{seg}"]) for seg in SEGMENTS if seg != "other"
+                    },
+                }
+            )
+    return out
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -193,6 +248,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--examples", type=int, default=4, help="Example records per class")
     parser.add_argument(
         "--tables", type=Path, default=TABLES_DIR, help="Where experiment results are read from"
+    )
+    parser.add_argument(
+        "--saliency",
+        type=Path,
+        default=RESULTS_DIR / "saliency_examples.npz",
+        help="Example maps written by scripts/explain_model.py",
     )
     return parser.parse_args(argv)
 
@@ -211,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
         "signals.json": signal_examples(meta, config, args.root, args.examples),
     }
     outputs["experiments.json"] = experiment_results(args.tables)
+    outputs["explain.json"] = explain_results(args.tables, args.saliency)
 
     for name, payload in outputs.items():
         (out / name).write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")

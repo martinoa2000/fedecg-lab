@@ -1,0 +1,20 @@
+# Phase 6: settings shared by every federated differentially private run.
+#
+# Five IID hospitals (as in fedavg_iid_5.yaml), each running DP-SGD on its own
+# ~3,400 records. Per-hospital batches stay at 256 so every round still takes
+# ~13 noisy steps; 1,024 would leave three. The learning rate is the best one
+# found for batch 256 on the validation fold. `fed_dp_none.yaml` is the
+# same recipe without privacy.
+
+extends: fedavg_iid_5.yaml
+
+training:
+  batch_size: 256
+  epochs: 30
+  learning_rate: 0.01
+
+federated:
+  rounds: 30
+
+privacy:
+  enabled: true

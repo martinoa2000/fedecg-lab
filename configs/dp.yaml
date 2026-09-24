@@ -1,0 +1,18 @@
+# Phase 6: settings shared by every centralized differentially private run.
+#
+# DP-SGD adds noise to every step, so it wants fewer, larger steps: batches of
+# 1,024 (the noise is shared by more records) and a higher learning rate,
+# capped at 30 epochs. Chosen at epsilon 8 on the validation fold (see
+# notebooks/05_differential_privacy.ipynb). The recipe also changes the
+# non-private model, so `dp_none.yaml` trains it without privacy: the cost of
+# privacy itself is measured against that run.
+
+extends: centralized.yaml
+
+training:
+  batch_size: 1024
+  epochs: 30
+  learning_rate: 0.03
+
+privacy:
+  enabled: true

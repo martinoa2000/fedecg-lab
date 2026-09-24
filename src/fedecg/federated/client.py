@@ -9,6 +9,11 @@ The optimizer is created fresh every round, as in the reference FedAvg and
 FedProx implementations, so no optimizer state carries over from one round's
 global model to the next. The learning rate for the round comes from the
 server in the fit config, which is how the cosine schedule spans rounds.
+
+With DP (phase 6), each hospital owns a `PrivateTraining`: its model is
+wrapped for DP-SGD for the round and unwrapped afterwards, while its privacy
+accountant keeps counting across rounds. Only the hospital's noisy, clipped
+updates reach the server.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import torch
 from flwr.client import NumPyClient
 from torch import nn
 
+from fedecg.privacy.dp_sgd import PrivateTraining
 from fedecg.training.loop import make_loader, train_one_epoch
 
 NDArrays = list[np.ndarray]
@@ -59,8 +65,10 @@ class ECGClient(NumPyClient):
         training_config: Mapping[str, Any],
         *,
         seed: int,
+        private: PrivateTraining | None = None,
     ):
         self.model = model
+        self.private = private
         self.device = device
         self.training_config = training_config
         self.n_records = len(signals)
@@ -91,10 +99,13 @@ class ECGClient(NumPyClient):
             weight_decay=float(self.training_config.get("weight_decay", 0.0)),
         )
         loss_fn = nn.BCEWithLogitsLoss()
+        model, loader = self.model, self.loader
+        if self.private is not None:
+            model, optimizer, loader = self.private.wrap(model, optimizer, loader)
         losses = [
             train_one_epoch(
-                self.model,
-                self.loader,
+                model,
+                loader,
                 optimizer,
                 loss_fn,
                 self.device,
@@ -103,4 +114,8 @@ class ECGClient(NumPyClient):
             )
             for _ in range(int(config.get("local_epochs", 1)))
         ]
-        return get_weights(self.model), self.n_records, {"train_loss": float(losses[-1])}
+        metrics = {"train_loss": float(losses[-1])}
+        if self.private is not None:
+            self.private.unwrap()
+            metrics["epsilon"] = self.private.epsilon()
+        return get_weights(self.model), self.n_records, metrics

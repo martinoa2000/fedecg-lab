@@ -1,0 +1,8 @@
+# Phase 6: centralized DP-SGD at epsilon 3 (delta 1e-5).
+
+extends: dp.yaml
+
+experiment: {phase: 6, setting: "Centralized, DP, epsilon 3"}
+
+privacy:
+  target_epsilon: 3.0
